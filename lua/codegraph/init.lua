@@ -65,6 +65,7 @@ local TYPE_WORDS = {
     ["void"] = true, ["int"] = true, ["char"] = true, ["short"] = true, ["long"] = true,
     ["float"] = true, ["double"] = true, ["bool"] = true, ["auto"] = true, ["signed"] = true,
     ["unsigned"] = true, ["const"] = true, ["static"] = true, ["virtual"] = true,
+    ["volatile"] = true, ["register"] = true, ["restrict"] = true,
     ["inline"] = true, ["explicit"] = true, ["extern"] = true, ["friend"] = true,
     ["struct"] = true, ["class"] = true, ["enum"] = true, ["union"] = true,
     ["namespace"] = true, ["template"] = true, ["typename"] = true, ["typedef"] = true,
@@ -86,6 +87,83 @@ local function name_before_paren(line)
     return nil
 end
 
+--- 按扩展名归一化语言家族 (判断"同名符号"是不是同一类工程里的)
+local EXT_LANG = {
+    c = "c", h = "c",
+    cc = "cxx", cpp = "cxx", cxx = "cxx", hpp = "cxx", hh = "cxx", hxx = "cxx",
+    inl = "cxx", ipp = "cxx", tpp = "cxx", m = "c", mm = "cxx",
+    py = "py", lua = "lua", go = "go", rs = "rs",
+    js = "js", ts = "js", jsx = "js", tsx = "js", mjs = "js", cjs = "js",
+    java = "java", kt = "kt", rb = "rb", php = "php", cs = "cs", swift = "swift",
+}
+
+---@param file string|nil
+---@return string|nil
+local function lang_of(file)
+    local ext = (file or ""):match("%.([%w]+)$")
+    return ext and EXT_LANG[ext:lower()] or nil
+end
+
+--- 结果里有没有和当前文件同族语言 (或语言未知) 的条目
+---@param items table[]
+---@param cur_file string
+---@return boolean
+local function has_related(items, cur_file)
+    local cur_lang = lang_of(cur_file)
+    if not cur_lang then
+        return true
+    end
+    for _, it in ipairs(items) do
+        local lang = lang_of(it.file)
+        if lang == nil or lang == cur_lang then
+            return true
+        end
+    end
+    return false
+end
+
+--- 光标在标识符上, 后面是不是跟 '(' (函数调用/定义)
+---@return boolean
+local function cursor_followed_by_paren()
+    local line = vim.api.nvim_get_current_line()
+    local col = vim.api.nvim_win_get_cursor(0)[2]
+    local rest = line:sub(col + 1)
+    local word = rest:match("^[%w_]+") or ""
+    local tail = rest:sub(#word + 1):gsub("^%s+", "")
+    return tail:sub(1, 1) == "("
+end
+
+--- 从当前 buffer 的声明里推断变量的类型:
+---   Foo *p = ...      -> "Foo"
+---   const Foo *p;     -> "Foo"
+---   Foo cfg;          -> "Foo"
+---@param name string
+---@return string|nil
+local function infer_type(name)
+    if not name or name == "" then
+        return nil
+    end
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local esc = vim.pesc(name)
+    local patterns = {
+        "struct%s+([%w_]+)%s*%*+%s*" .. esc .. "%f[%W]",
+        "union%s+([%w_]+)%s*%*+%s*" .. esc .. "%f[%W]",
+        "([%w_]+)%s*%*+%s*" .. esc .. "%f[%W]",
+        "struct%s+([%w_]+)%s+" .. esc .. "%f[%W]",
+        "union%s+([%w_]+)%s+" .. esc .. "%f[%W]",
+        "([%w_]+)%s+" .. esc .. "%f[%W]",
+    }
+    for _, pat in ipairs(patterns) do
+        for _, line in ipairs(lines) do
+            local ty = line:match(pat)
+            if ty and ty ~= name and not TYPE_WORDS[ty] then
+                return ty
+            end
+        end
+    end
+    return nil
+end
+
 --- cursor 下的符号: <cWORD> 拿去清理成 "限定名" 和 "短名"
 --- 例: "ns::Foo(" -> { qualified = "ns::Foo", name = "Foo" }
 ---     "main()" / "(bar)" / "baz);" / "std::vector<int>" 也都要能收拾干净
@@ -94,6 +172,19 @@ function M.symbol()
     local word = vim.fn.expand("<cWORD>")
     if not word or word == "" then
         word = vim.fn.expand("<cword>")
+    end
+
+    -- 成员访问: p->field / obj.field (C/C++ 里 codegraph 不索引结构体成员)
+    -- <cWORD> 会把前后的 & ( , 之类一起带进来, 所以不锚定开头
+    local raw_word = word or ""
+    local base, member, member_end = raw_word:match("([%w_]+)%s*%-%>%s*([%w_]+)()")
+    if not base then
+        base, member, member_end = raw_word:match("([%w_]+)%.([%w_]+)()")
+    end
+    local is_call = false
+    if member and member_end then
+        local tail = raw_word:sub(member_end):gsub("^%s+", "")
+        is_call = tail:sub(1, 1) == "("
     end
 
     local w = (word or ""):gsub("%s+", "")
@@ -120,7 +211,13 @@ function M.symbol()
         end
     end
 
-    return { name = short, qualified = w }
+    return {
+        name = short,
+        qualified = w,
+        base = base,
+        member = member,
+        is_call = is_call,
+    }
 end
 
 -- ---------------------------------------------------------------------------
@@ -253,6 +350,25 @@ local function pick_wanted(items, want_decl)
     return out
 end
 
+--- 把跳转交回 coc (clangd 认识结构体成员/局部变量)
+---@param reason string|nil
+---@return boolean
+local function feed_coc_definition(reason)
+    local cfg = config.get()
+    if cfg.definition.fallback ~= "coc" or vim.fn.exists("*CocAction") ~= 1 then
+        return false
+    end
+    if reason then
+        util.notify(reason .. ", 交给 coc", vim.log.levels.INFO)
+    end
+    vim.api.nvim_feedkeys(
+        vim.api.nvim_replace_termcodes("<Plug>(coc-definition)", true, false, true),
+        "m",
+        false
+    )
+    return true
+end
+
 function M.definition(opts)
     opts = opts or {}
     local ctx, adapter = resolve_or_warn()
@@ -267,6 +383,91 @@ function M.definition(opts)
     end
 
     local cfg = config.get()
+
+    -- 成员访问 (p->field / obj.field, 非函数调用):
+    -- codegraph 只索引 struct 类型, 不索引成员; 先按 base 的声明推断类型,
+    -- 直接跳到结构体定义, 而不是拿成员名去撞同名的函数
+    -- C 没有成员函数, p->x 一定是结构体字段 (x 可能撞上同名函数),
+    -- 一律按 base 的类型跳 struct; C++ 的 p->Method() 是真方法, 照旧按名字查
+    local c_family = { c = true, objc = true }
+    local cxx_family = { cpp = true, objcpp = true, cuda = true }
+    local ft = vim.bo.filetype
+    local member_mode = sym.member
+        and (c_family[ft] == true or (cxx_family[ft] == true and not sym.is_call))
+    if not opts.name and member_mode then
+        local type_name = infer_type(sym.base)
+        local type_items = {}
+        if type_name then
+            type_items = adapter.definition(ctx, type_name, {
+                kinds = cfg.definition.type_kinds,
+                limit = 20,
+            }) or {}
+        end
+        if #type_items > 0 then
+            if #type_items == 1 then
+                picker.jump(type_items[1])
+            else
+                picker.open("definition", {
+                    ctx = ctx,
+                    adapter = adapter,
+                    name = type_name,
+                    items = type_items,
+                })
+            end
+            return
+        end
+        if feed_coc_definition(("codegraph 不索引结构体成员 %s"):format(sym.member)) then
+            return
+        end
+        util.notify(
+            ("没找到 %s 的结构体定义 (成员本身不在图谱里)"):format(sym.base or sym.member),
+            vim.log.levels.WARN
+        )
+        return
+    end
+
+    -- C++ 的 p->Method(): 方法名可能和别的类/自由函数重名;
+    -- 能推出 base 类型时只认 Type::Method, 推不出来才退回按名字查
+    if not opts.name and sym.member and sym.is_call and cxx_family[ft] then
+        local type_name = infer_type(sym.base)
+        if type_name then
+            local prefix = type_name .. "::"
+            local all = adapter.definition(ctx, sym.member, {
+                kinds = { "method", "function" },
+                limit = 50,
+            }) or {}
+            local typed = {}
+            for _, it in ipairs(all) do
+                local q = it.qualified_name or ""
+                if q:sub(1, #prefix) == prefix then
+                    typed[#typed + 1] = it
+                end
+            end
+            if #typed > 0 then
+                if #typed == 1 then
+                    picker.jump(typed[1])
+                else
+                    picker.open("definition", {
+                        ctx = ctx,
+                        adapter = adapter,
+                        name = sym.member,
+                        items = typed,
+                    })
+                end
+                return
+            end
+            if feed_coc_definition(("codegraph 里没有 %s::%s"):format(type_name, sym.member)) then
+                return
+            end
+            util.notify(
+                ("%s::%s 不在图谱里 (只有同名符号), 装 coc/clangd 才能精确跳"):format(
+                    type_name, sym.member),
+                vim.log.levels.WARN
+            )
+            return
+        end
+    end
+
     local items = adapter.definition(ctx, sym.qualified, opts) or {}
     if #items == 0 and sym.qualified ~= sym.name then
         items = adapter.definition(ctx, sym.name, opts) or {}
@@ -291,6 +492,33 @@ function M.definition(opts)
         end
     end
 
+    -- 名字撞上别的语言里的同名符号 (C 工程里的 base 撞 Python 的 base):
+    -- 按 buffer 里的声明推断类型, 走结构体定义, 而不是跳去 Python
+    local cur_file = vim.api.nvim_buf_get_name(0)
+    if #items > 0 and not sym.member and not cursor_followed_by_paren()
+        and not has_related(items, cur_file) then
+        local type_name = infer_type(sym.name)
+        if type_name then
+            local type_items = adapter.definition(ctx, type_name, {
+                kinds = cfg.definition.type_kinds,
+                limit = 20,
+            }) or {}
+            if #type_items > 0 then
+                if #type_items == 1 then
+                    picker.jump(type_items[1])
+                else
+                    picker.open("definition", {
+                        ctx = ctx,
+                        adapter = adapter,
+                        name = type_name,
+                        items = type_items,
+                    })
+                end
+                return
+            end
+        end
+    end
+
     -- 本层索引里没有: 再看上级 .codegraph (多级索引)
     local parents_merged = false
     if #items == 0 then
@@ -299,21 +527,36 @@ function M.definition(opts)
     end
 
     if #items == 0 then
-        -- 各级索引都没有: 按配置交给 coc/lsp 兜底
-        local fallback = cfg.definition.fallback
-        if fallback == "coc" and vim.fn.exists("*CocAction") == 1 then
-            util.notify(("codegraph 里没有 %s, 交给 coc"):format(sym.name), vim.log.levels.INFO)
-            vim.api.nvim_feedkeys(
-                vim.api.nvim_replace_termcodes("<Plug>(coc-definition)", true, false, true),
-                "m",
-                false
-            )
-        else
-            util.notify(
-                ("没有找到定义: %s (索引可能过期, 试 :CodeGraph sync)"):format(sym.name),
-                vim.log.levels.WARN
-            )
+        -- 普通变量/参数: 按 buffer 里的声明推断类型, 跳到 struct/class 定义
+        local type_name = (not sym.member) and infer_type(sym.name) or nil
+        if type_name then
+            local type_items = adapter.definition(ctx, type_name, {
+                kinds = cfg.definition.type_kinds,
+                limit = 20,
+            }) or {}
+            if #type_items > 0 then
+                if #type_items == 1 then
+                    picker.jump(type_items[1])
+                else
+                    picker.open("definition", {
+                        ctx = ctx,
+                        adapter = adapter,
+                        name = type_name,
+                        items = type_items,
+                    })
+                end
+                return
+            end
         end
+
+        -- 各级索引都没有: 按配置交给 coc/lsp 兜底
+        if feed_coc_definition(("codegraph 里没有 %s"):format(sym.name)) then
+            return
+        end
+        util.notify(
+            ("没有找到定义: %s (索引可能过期, 试 :CodeGraph sync)"):format(sym.name),
+            vim.log.levels.WARN
+        )
         return
     end
 

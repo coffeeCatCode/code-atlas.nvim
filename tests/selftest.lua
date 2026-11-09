@@ -188,6 +188,10 @@ local symbol_cases = {
     { line = "    obj->method();", at = "method", want = "method" },
     { line = "#define MAX_SIZE 10", at = "MAX_SIZE", want = "MAX_SIZE" },
     { line = "    ::globalFn();", at = "globalFn", want = "globalFn" },
+    { line = "    obj->method();", at = "method", want = "method", base = "obj", member = "method", call = true },
+    { line = "    p->len = 0;", at = "len", want = "len", base = "p", member = "len", call = false },
+    { line = "    cfg.count = 0;", at = "count", want = "count", base = "cfg", member = "count", call = false },
+    { line = "    pFoo->Init();", at = "Init", want = "Init", base = "pFoo", member = "Init", call = true },
 }
 local cg_mod = require("codegraph")
 local scratch = vim.api.nvim_create_buf(false, true)
@@ -198,6 +202,17 @@ for _, case in ipairs(symbol_cases) do
     vim.api.nvim_win_set_cursor(0, { 1, col - 1 })
     local sym = cg_mod.symbol()
     check(sym.name == case.want, ("%s -> name=%s (want %s)"):format(case.line, sym.name, case.want))
+    if case.base then
+        check(sym.base == case.base, ("%s -> base=%s (want %s)"):format(case.line, tostring(sym.base), case.base))
+    end
+    if case.member then
+        check(sym.member == case.member,
+            ("%s -> member=%s (want %s)"):format(case.line, tostring(sym.member), case.member))
+    end
+    if case.call ~= nil then
+        check(sym.is_call == case.call,
+            ("%s -> is_call=%s (want %s)"):format(case.line, tostring(sym.is_call), tostring(case.call)))
+    end
 end
 
 -- ---------------------------------------------------------------------------

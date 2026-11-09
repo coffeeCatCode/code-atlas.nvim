@@ -267,20 +267,26 @@ watcher = {
 
 1. 取光标下的 `<cWORD>`，去掉首尾括号标点，拆成
    `qualified`（如 `ns::Foo`）和 `name`（`Foo`）；
-2. 先按限定名精确查，没有再按短名查（`name` 相等，或 `qualified_name` 以 `::name` 结尾）；
-3. 排序：名字完全相等 → 按"想要声明还是实现"（见下条）→ **当前文件优先** → 路径/行号；
-4. **声明/实现互跳**（`definition.toggle = true`）：在 `.c/.cpp` 里按 `gd` 优先找 `.h/.hpp`
+2. **成员访问 / 结构体变量**（`p->field`、`obj.field`，或光标就在 `p` 上）：
+   codegraph 只给 `struct/class` 类型建节点、**不索引成员**，所以 `gd` 先在当前 buffer 里
+   找 base 的声明（`Foo *p = ...`、`Foo f;`、`void f(Foo *p)`），推出类型后
+   直接跳到 `struct/class` 定义 —— 不会拿成员名去撞同名的函数；
+   C++ 的 `p->Method()` 只认 `Type::Method` 的候选，方法没进图谱就交给 coc；
+   推不出类型（声明在别的文件/`auto`）也交给 coc；
+3. 先按限定名精确查，没有再按短名查（`name` 相等，或 `qualified_name` 以 `::name` 结尾）；
+4. 排序：名字完全相等 → 按"想要声明还是实现"（见下条）→ **当前文件优先** → 路径/行号；
+5. **声明/实现互跳**（`definition.toggle = true`）：在 `.c/.cpp` 里按 `gd` 优先找 `.h/.hpp`
    里的声明，在头文件里则优先找实现；"想要的那一类"恰好只有一个就直接跳，多个才弹列表
    —— 所以从实现能跳回头文件，不再永远停在实现上（条目上 `·h` 表示这是头文件里的声明）；
-5. 结果 1 个直接跳；多个 → telescope 列表；
-6. **跳过去之后光标落在符号名上**：codegraph 给的 `start_column` 对 C/C++ 基本是 0，
+6. 结果 1 个直接跳；多个 → telescope 列表；
+7. **跳过去之后光标落在符号名上**：codegraph 给的 `start_column` 对 C/C++ 基本是 0，
    直接用它只会停在行首（`<cWORD>` 变成 `void`），所以跳转时会在目标行（及后 3 行）里
    找符号名再定位；连续按两次 `gd` 就能在声明/实现之间来回跳；
-7. **C/C++ 头文件原型兜底**：codegraph 只给函数**定义**建节点，头文件里的
+8. **C/C++ 头文件原型兜底**：codegraph 只给函数**定义**建节点，头文件里的
    `uint8_t Foo(int);` 不进 `nodes` 表 —— 所以从 `.c` 按 `gd` 在索引里找不到声明。
    这时会在头文件里用 `rg` 捞原型（`-g *.h/*.hpp/...`，要求 `;` 结尾、无 `{`、
    非 typedef/#define、`=` 不在 `(` 之前），同名的头文件优先。
-8. 一个都没有 → 按 `definition.fallback` 交给 coc（喂 `<Plug>(coc-definition)`），
+9. 一个都没有 → 按 `definition.fallback` 交给 coc（喂 `<Plug>(coc-definition)`），
    没有 coc 就提示"索引可能过期，试 `:CodeGraph sync`"。
 
 ---
@@ -322,6 +328,7 @@ require("codegraph").setup({
         kinds = { "function", "method", "class", "struct", "enum", "type_alias", ... },
         header_exts = { "h", "hpp", "hh", "hxx", "inl", "ipp", "tpp", "inc", "def" },
         toggle = true,                            -- .h 里按 gd 找实现, .c/.cpp 里找声明
+        type_kinds = { "struct", "class", "union", "enum", "type_alias", "typedef" },
         search_parents = true,                    -- 本层没有时查上级 .codegraph
         max_parents = 3,
         prefer_impl = true,                       -- toggle 判断不出来时的默认倾向
@@ -555,6 +562,9 @@ nvim --headless -u ~/.config/nvim/local/codegraph.nvim/tests/minimal_init.lua \
 
 - **codegraph 的 `start_column` 不可靠**（C/C++ 常年是 0）：跳转定位靠"在目标行里找符号名"，
   名字在目标行出现多次时取第一个；找不到才退回行首。
+- **结构体成员不在图谱里**：codegraph 只索引 `struct/class` 类型，没有字段节点。`gd` 靠
+  当前 buffer 里的声明推断 base 的类型再跳到类型定义；声明不在当前文件（全局变量、`auto`）
+  时只能交给 coc。多个同名结构体（比如仓库里有份 `audit/` 拷贝）会弹列表。
 - **多级索引只向上找**：`gd` 和 `gr` 都会合并上级索引，但从父仓库打开文件不会反查子模块索引。
   合并父索引会让每次搜索多花约 15ms/层（只查有索引的祖先）。
 - **codegraph 不索引 C/C++ 头文件里的函数原型**：`.h` 里通常只有 `enum/struct/宏` 有节点，

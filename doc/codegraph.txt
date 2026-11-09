@@ -55,6 +55,9 @@ codegraph 是给 AI 用的代码图谱: 在项目根生成 `.codegraph/codegraph
 
                                                    *codegraph-definition*
 <Leader>gd: 光标下的 <cWORD> 去括号后先按限定名查, 没有命中再按短名查。
+光标在成员访问上 (p->field / obj.field) 或结构体变量上时: codegraph 不索引成员,
+先按当前 buffer 里的声明推断 base 的类型, 跳到 struct/class 定义 (不会跳同名函数);
+C++ 的 p->Method() 只认 Type::Method, 方法没进图谱时交给 coc。
 在 .h/.hpp 里按优先找实现, 在 .c/.cpp 里按优先找声明 (definition.toggle);
 唯一候选直接跳, 多个才弹 telescope 列表。跳转后光标会落在符号名上
 (codegraph 的 start_column 对 C/C++ 不可靠), 所以连按两次就在声明和实现之间来回跳。
@@ -109,6 +112,7 @@ telescope 扩展:                                     *:Telescope codegraph*
                    include_usages = true, usage_limit = 200,
                    search_parents = true, max_parents = 2 },
         definition = { jump_single = true, fallback = "coc", toggle = true,
+                       type_kinds = { "struct", "class", "union", "enum", "type_alias" },
                        search_parents = true, max_parents = 3 },
         keymaps = { search = "<Leader>gr", definition = "<Leader>gd" },
         watcher = { mode = "auto" },                 -- |codegraph-watcher|

@@ -122,6 +122,17 @@ M.defaults = {
         same_file_first = true,
         -- 只有一个结果时直接跳; false = 也开 picker
         jump_single = true,
+        -- 光标在结构体变量 / 成员访问上时, 按声明推断类型, 跳到这些 kind 的定义
+        type_kinds = {
+            "struct",
+            "class",
+            "union",
+            "enum",
+            "type_alias",
+            "typedef",
+            "interface",
+            "trait",
+        },
         -- 本层索引里没有时, 继续查上级 .codegraph (多级索引: 子模块 + 顶层仓库)
         search_parents = true,
         max_parents = 3,
