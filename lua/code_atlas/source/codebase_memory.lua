@@ -49,11 +49,17 @@ function M.warmup(ctx)
     if not util.executable(cmd[1]) then
         return
     end
+    -- cwd 决定 codebase-memory 自动 index/watch 的项目; 换项目时客户端会重启
+    local cwd = nil
+    if cfg().auto_update ~= false then
+        cwd = ctx.root
+    end
+    project_cache[ctx.root:gsub("/$", "")] = nil
     mcp.start(function(ok)
         if ok then
             M.project(ctx)
         end
-    end)
+    end, cwd)
 end
 
 --- 当前项目在 codebase-memory 里的名字 (没有索引返回 nil)
@@ -71,7 +77,7 @@ function M.project(ctx)
 
     local data = mcp.call("list_projects", { limit = 1000, format = "json" }, 8000)
     if not data or type(data.projects) ~= "table" then
-        project_cache[root] = false
+        -- 不缓存失败: 打开 nvim 时 codebase-memory 可能正在自动建索引
         return nil
     end
 
@@ -89,8 +95,11 @@ function M.project(ctx)
         end
     end
 
-    project_cache[root] = best and best.name or false
-    return best and best.name or nil
+    if best then
+        project_cache[root] = best.name
+        return best.name
+    end
+    return nil
 end
 
 --- 清掉项目名缓存 (重新索引后用)
@@ -294,7 +303,7 @@ function M.status(ctx)
     if not project then
         return nil
     end
-    return mcp.call("index_status", { project = project }, cfg().timeout or 2500)
+    return mcp.call("index_status", { project = project, format = "json" }, cfg().timeout or 2500)
 end
 
 return M

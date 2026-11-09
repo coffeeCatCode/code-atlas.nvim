@@ -219,6 +219,9 @@ M.defaults = {
         cmd = { "codebase-memory-mcp" },
         timeout = 2500,      -- 单次 tools/call 超时 (冷启动由 mcp_cbm 单独等)
         search_limit = 100,  -- 搜索时最多并入多少条
+        -- 让 MCP 进程以项目根为 cwd: codebase-memory 会自动建索引并后台增量同步
+        -- (非 git 项目需要它自己的 watch_non_git=true 才会 watch)
+        auto_update = true,
     },
 
     mcp = {

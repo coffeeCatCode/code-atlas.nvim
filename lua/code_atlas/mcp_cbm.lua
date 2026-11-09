@@ -5,6 +5,9 @@
 --   - codegraph 每个项目一个 serve 进程, 有 daemon.sock/pid 要清理;
 --   - codebase-memory-mcp 是全局一个进程 (项目名作为参数), 冷启动 ~1s,
 --     热态 tools/call ~10ms, 由 nvim 负责拉起/杀掉。
+--
+-- cwd 很重要: 进程的 cwd 决定 codebase-memory 自动 index/watch 哪个项目。
+-- 进项目时用 ctx.root 拉起, 它就会自动建索引并在后台增量同步; 切项目时重启。
 -- ============================================================================
 
 local M = {}
@@ -17,6 +20,7 @@ local state = {
     ready = false,
     initializing = false,
     dead = false,
+    cwd = nil,
     buf = "",
     next_id = 1,
     pending = {},
@@ -32,6 +36,7 @@ local function reset()
     state.ready = false
     state.initializing = false
     state.dead = false
+    state.cwd = nil
     state.buf = ""
     state.pending = {}
     state.waiters = {}
@@ -39,18 +44,20 @@ end
 
 local function dispatch(msg)
     local id = msg.id
-    if id ~= nil then
-        local slot = state.pending[id]
-        if slot then
-            slot.result = msg
-            slot.done = true
-            state.pending[id] = nil
-            if slot.on_done then
-                vim.schedule(function()
-                    slot.on_done(msg)
-                end)
-            end
-        end
+    if id == nil then
+        return
+    end
+    local slot = state.pending[id]
+    if not slot then
+        return
+    end
+    slot.result = msg
+    slot.done = true
+    state.pending[id] = nil
+    if slot.on_done then
+        vim.schedule(function()
+            slot.on_done(msg)
+        end)
     end
 end
 
@@ -126,17 +133,54 @@ local function request(method, params, timeout)
     return msg.result
 end
 
---- 启动并 initialize (幂等)
----@param timeout integer|nil
----@return boolean
---- 后台启动 (不阻塞): 初始化完成后回调
+local function spawn(cwd)
+    local c = cfg()
+    if c.enabled == false then
+        return false, "disabled"
+    end
+    local cmd = c.cmd or { "codebase-memory-mcp" }
+    if not util.executable(cmd[1]) then
+        return false, "not installed"
+    end
+    state.cwd = cwd and vim.fs.normalize(cwd) or vim.fs.normalize(vim.fn.getcwd())
+    local ok = pcall(function()
+        state.proc = vim.system(cmd, {
+            cwd = state.cwd,
+            stdin = true,
+            stdout = on_stdout,
+            stderr = function() end,
+            text = true,
+        }, on_exit)
+    end)
+    if not ok or not state.proc then
+        reset()
+        return false, "spawn failed"
+    end
+    return true
+end
+
+local function fail_waiters()
+    local finished = state.waiters
+    state.waiters = {}
+    for _, w in ipairs(finished) do
+        pcall(w, false)
+    end
+end
+
+--- 后台启动 (不阻塞), 初始化完成后回调
 ---@param cb fun(ok: boolean)|nil
-function M.start(cb)
+---@param cwd string|nil 进程工作目录 (决定自动 index/watch 的项目)
+function M.start(cb, cwd)
+    cwd = cwd and vim.fs.normalize(cwd) or nil
     if state.ready then
-        if cb then
-            cb(true)
+        if not cwd or cwd == state.cwd then
+            if cb then
+                cb(true)
+            end
+            return
         end
-        return
+        -- 换项目必须重启, 新 cwd 才会触发 auto_index / auto_watch
+        M.stop()
     end
     if cb then
         state.waiters[#state.waiters + 1] = cb
@@ -145,36 +189,12 @@ function M.start(cb)
         return
     end
 
-    local c = cfg()
-    local function fail_waiters()
-        local finished = state.waiters
-        state.waiters = {}
-        for _, w in ipairs(finished) do
-            pcall(w, false)
-        end
-    end
-    if c.enabled == false then
-        fail_waiters()
-        return
-    end
-    local cmd = c.cmd or { "codebase-memory-mcp" }
-    if not util.executable(cmd[1]) then
-        fail_waiters()
-        return
-    end
-
     state.initializing = true
     state.dead = false
-    local ok = pcall(function()
-        state.proc = vim.system(cmd, {
-            stdin = true,
-            stdout = on_stdout,
-            stderr = function() end,
-            text = true,
-        }, on_exit)
-    end)
-    if not ok or not state.proc then
+    local ok = spawn(cwd)
+    if not ok then
         state.initializing = false
+        fail_waiters()
         return
     end
 
@@ -215,13 +235,20 @@ function M.start(cb)
             state.proc:kill(9)
         end)
         reset()
-        return
     end
 end
 
-function M.ensure(timeout)
+--- 同步启动/复用 (gd 这类不能异步的路径用)
+---@param timeout integer|nil
+---@param cwd string|nil
+---@return boolean
+function M.ensure(timeout, cwd)
+    cwd = cwd and vim.fs.normalize(cwd) or nil
     if state.ready then
-        return true
+        if not cwd or cwd == state.cwd then
+            return true
+        end
+        M.stop()
     end
     if state.initializing then
         vim.wait(timeout or 6000, function()
@@ -230,27 +257,11 @@ function M.ensure(timeout)
         return state.ready
     end
 
-    local c = cfg()
-    if c.enabled == false then
-        return false
-    end
-    local cmd = c.cmd or { "codebase-memory-mcp" }
-    if not util.executable(cmd[1]) then
-        return false
-    end
-
     state.initializing = true
     state.dead = false
-    local ok = pcall(function()
-        state.proc = vim.system(cmd, {
-            stdin = true,
-            stdout = on_stdout,
-            stderr = function() end,
-            text = true,
-        }, on_exit)
-    end)
-    if not ok or not state.proc then
-        reset()
+    local ok = spawn(cwd)
+    if not ok then
+        state.initializing = false
         return false
     end
 
@@ -277,10 +288,11 @@ end
 ---@param tool string
 ---@param args table
 ---@param timeout integer|nil
+---@param cwd string|nil
 ---@return table|nil data
 ---@return string|nil err
-function M.call(tool, args, timeout)
-    if not M.ensure(timeout) then
+function M.call(tool, args, timeout, cwd)
+    if not M.ensure(timeout, cwd) then
         return nil, "codebase-memory-mcp 不可用"
     end
     local res, err = request("tools/call", { name = tool, arguments = args }, timeout)
@@ -320,6 +332,11 @@ end
 ---@return boolean
 function M.ready()
     return state.ready and not state.dead
+end
+
+---@return string|nil
+function M.cwd()
+    return state.cwd
 end
 
 function M.stop()

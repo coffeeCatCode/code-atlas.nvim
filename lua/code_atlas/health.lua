@@ -142,14 +142,21 @@ function M.check()
                     local ok2, st = pcall(cb.status, ctx2)
                     if ok2 and type(st) == "table" then
                         local text = st.text or ""
-                        local nodes = text:match("nodes:%s*(%d+)")
-                        local edges = text:match("edges:%s*(%d+)")
+                        local nodes = st.nodes or text:match("nodes:%s*(%d+)")
+                        local edges = st.edges or text:match("edges:%s*(%d+)")
                         if nodes then
                             h.info(("索引: %s 节点 / %s 边"):format(nodes, edges or "?"))
                         end
-                        local indexed = text:match("indexed_at:%s*([^%s]+)")
+                        local indexed = st.indexed_at or text:match("indexed_at:%s*([^%s]+)")
                         if indexed then
                             h.info("最近索引: " .. indexed)
+                        end
+                        local watch = st.watch
+                        if type(watch) == "table" then
+                            h.info(("自动更新: %s%s"):format(
+                                watch.watched and "on" or "off",
+                                watch.strategy and (" (" .. watch.strategy .. ")") or ""
+                            ))
                         end
                     end
                 end

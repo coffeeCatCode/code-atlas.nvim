@@ -168,6 +168,11 @@ codegraph，原来的用法完全不变。
 冷启动约 1s（进项目时后台拉起，不阻塞 UI），之后每次查询 ~10ms；退出 nvim 时把进程清掉。
 项目名按 `list_projects` 的 `root_path` 最长前缀匹配，子目录里的 buffer 也能对上。
 
+**自动建索引 / 增量同步**：MCP 进程以项目根为 `cwd` 启动，codebase-memory 看到新项目会自动
+建索引，已有索引会在后台 watch（5s 轮询 / git 变化）并增量更新——不用再手动
+`index_repository`。切项目时客户端会用新 `cwd` 重启。`codebase_memory.auto_update = false`
+可关掉（只查询、不更新）；非 git 项目需要它自己的 `watch_non_git = true` 才会 watch。
+
 ---
 
 ## 5. 项目定位（那条"往上找"的规则）
@@ -326,6 +331,7 @@ require("code_atlas").setup({
         cmd = { "codebase-memory-mcp" },
         timeout = 2500,      -- 单次 tools/call 超时
         search_limit = 100,  -- 搜索时最多并入多少条
+        auto_update = true,  -- 以项目根为 cwd 启动, 自动建索引 + 后台增量同步
     },
 
     project = {
@@ -592,6 +598,8 @@ nvim --headless -u ~/.config/nvim/local/code-atlas.nvim/tests/minimal_init.lua \
 
 - **code-atlas 的 `start_column` 不可靠**（C/C++ 常年是 0）：跳转定位靠"在目标行里找符号名"，
   名字在目标行出现多次时取第一个；找不到才退回行首。
+- **codebase-memory 自动更新依赖它的 watcher**：只 watch git 项目（它自己的
+  `watch_non_git=false`）；首次建索引要几秒，期间 `gd` 会先走 codegraph。
 - **codebase-memory 是可选增强**：它按项目单独建索引（`~/.cache/codebase-memory-mcp/`），
   索引过期/项目搬过家时 `gd` 可能落在旧行号；`<Leader>gd` 优先 codegraph、搜不到才问它，
   所以日常路径不受影响。它也没有"声明/实现"概念，互跳永远由 codegraph 负责。

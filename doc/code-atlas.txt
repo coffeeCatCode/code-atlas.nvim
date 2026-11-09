@@ -154,7 +154,10 @@ codebase-memory 增强 (codebase_memory.enabled, 默认开):
     - gr 合并两边的搜索结果 (按 文件:行:名 去重), 索引没预热好时跳过
     - 没装/没索引/索引过期就自动退回 codegraph, 行为不变
     - 冷启动 ~1s (进项目时后台拉起, 不阻塞 UI), 热态 ~10ms, 退出时清理
-    codebase_memory = { enabled = true, cmd = { "codebase-memory-mcp" }, timeout = 2500 }
+    - 自动更新: MCP 进程以项目根为 cwd, 自动建索引 + 后台增量同步 (auto_update)
+      非 git 项目需要 codebase-memory 自己的 watch_non_git=true 才会 watch
+    codebase_memory = { enabled = true, cmd = { "codebase-memory-mcp" },
+                        timeout = 2500, auto_update = true }
 
                                           *code-atlas-schema-drift*
 直读前会 PRAGMA table_info(nodes) 校验必需列; 缺列/运行中报 no such column
