@@ -55,7 +55,7 @@ lazy.nvim（从 GitHub 装）：
 
 ```lua
 {
-    "you/code-atlas.nvim",      -- 换成你的仓库地址
+    "coffeeCatCode/code-atlas.nvim",      -- 换成你的仓库地址
     lazy = false,              -- 要在 coc 之后注册键位，不能懒加载
     priority = 40,             -- < coc 的 50，保证 setup 在 coc 之后跑
     opts = {},                 -- 见第 8 节
