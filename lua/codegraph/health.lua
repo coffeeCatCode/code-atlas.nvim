@@ -113,6 +113,50 @@ function M.check()
     h.info("配置顺序: " .. table.concat(cfg.sources or {}, " -> "))
 
     -- ------------------------------------------------------------------
+    -- ------------------------------------------------------------------
+    h.start("codebase-memory (可选增强)")
+    -- ------------------------------------------------------------------
+    do
+        local cfg_cb = cfg.codebase_memory or {}
+        local source_mod = require("codegraph.source")
+        source_mod.load()
+        local cb = source_mod.get("codebase_memory")
+        local exe = cfg_cb.cmd and cfg_cb.cmd[1] or "codebase-memory-mcp"
+        if cfg_cb.enabled == false then
+            h.info("已禁用 (codebase_memory.enabled = false)")
+        elseif not util.executable(exe) then
+            h.info(("%s 不在 PATH 里: 自动只用 codegraph"):format(exe))
+        elseif not cb then
+            h.warn("适配器未加载")
+        else
+            local ctx2 = project.context()
+            if not ctx2 then
+                h.info("当前 buffer 不在任何项目里, 跳过")
+            else
+                local ok, proj = pcall(cb.project, ctx2)
+                if not ok or not proj then
+                    h.info("当前项目没有 codebase-memory 索引: 自动退回 codegraph")
+                    h.info("需要时: codebase-memory-mcp cli index_repository --repo-path " .. ctx2.root)
+                else
+                    h.ok("项目: " .. proj)
+                    local ok2, st = pcall(cb.status, ctx2)
+                    if ok2 and type(st) == "table" then
+                        local text = st.text or ""
+                        local nodes = text:match("nodes:%s*(%d+)")
+                        local edges = text:match("edges:%s*(%d+)")
+                        if nodes then
+                            h.info(("索引: %s 节点 / %s 边"):format(nodes, edges or "?"))
+                        end
+                        local indexed = text:match("indexed_at:%s*([^%s]+)")
+                        if indexed then
+                            h.info("最近索引: " .. indexed)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     h.start("MCP")
     -- ------------------------------------------------------------------
     if cfg.mcp.enabled == false then

@@ -429,6 +429,54 @@ local function feed_coc_definition(reason)
     return true
 end
 
+--- codebase-memory 适配器 (装了且有当前项目索引才返回)
+---@param ctx table
+---@return table|nil
+local function cbm_adapter(ctx)
+    local cfg = config.get()
+    if not cfg.codebase_memory or cfg.codebase_memory.enabled == false then
+        return nil
+    end
+    local ok, source = pcall(require, "codegraph.source")
+    if not ok then
+        return nil
+    end
+    source.load()
+    local adapter = source.get("codebase_memory")
+    if adapter and adapter.available(ctx) then
+        return adapter
+    end
+    return nil
+end
+
+--- 一个就跳, 多个弹列表
+---@param items table[]
+---@param ctx table
+---@param adapter table
+---@param title string
+local function show_items(items, ctx, adapter, title, prefer_same_file)
+    if #items == 0 then
+        return
+    end
+    if #items == 1 then
+        picker.jump(items[1])
+        return
+    end
+    if prefer_same_file then
+        local cur = vim.api.nvim_buf_get_name(0)
+        if items[1].file == cur then
+            picker.jump(items[1])
+            return
+        end
+    end
+    picker.open("definition", {
+        ctx = ctx,
+        adapter = adapter,
+        name = title,
+        items = items,
+    })
+end
+
 function M.definition(opts)
     opts = opts or {}
     local ctx, adapter = resolve_or_warn()
@@ -455,6 +503,29 @@ function M.definition(opts)
     local member_mode = sym.member
         and (c_family[ft] == true or (cxx_family[ft] == true and not sym.is_call))
     if not opts.name and member_mode then
+        -- 结构体成员: codegraph 不索引, codebase-memory 有 Field 节点
+        local cbm = cbm_adapter(ctx)
+        if cbm then
+            local fields = cbm.definition(ctx, sym.member, { labels = { "Field" }, limit = 20 }) or {}
+            if #fields > 0 then
+                local want = infer_type(sym.base)
+                if want and #fields > 1 then
+                    local filtered = {}
+                    for _, it in ipairs(fields) do
+                        local pc = it.parent_class or ""
+                        if pc == want or pc:sub(-(#want + 1)) == "." .. want then
+                            filtered[#filtered + 1] = it
+                        end
+                    end
+                    if #filtered > 0 then
+                        fields = filtered
+                    end
+                end
+                show_items(fields, ctx, adapter, sym.member, true)
+                return
+            end
+        end
+
         local type_name = infer_type(sym.base)
         local type_items = {}
         if type_name then
@@ -587,6 +658,17 @@ function M.definition(opts)
     end
 
     if #items == 0 then
+        local cbm = cbm_adapter(ctx)
+
+        -- 对象式宏: codebase-memory 有 Macro 节点 (codegraph 完全不索引)
+        if cbm and not sym.member then
+            local macros = cbm.definition(ctx, sym.name, { labels = { "Macro" }, limit = 20 }) or {}
+            if #macros > 0 then
+                show_items(macros, ctx, adapter, sym.name, true)
+                return
+            end
+        end
+
         -- 普通变量/参数: 按 buffer 里的声明推断类型, 跳到 struct/class 定义
         local type_name = (not sym.member) and infer_type(sym.name) or nil
         if type_name then
@@ -605,6 +687,15 @@ function M.definition(opts)
                         items = type_items,
                     })
                 end
+                return
+            end
+        end
+
+        -- 函数/类/枚举: codegraph 没有时用 codebase-memory 兜底
+        if cbm and not sym.member then
+            local hits = cbm.definition(ctx, sym.name, { limit = 20 }) or {}
+            if #hits > 0 then
+                show_items(hits, ctx, adapter, sym.name)
                 return
             end
         end
@@ -1093,11 +1184,35 @@ function M.setup(opts)
         end,
     })
 
+    -- codebase-memory: 进项目后后台拉起 MCP + 解析项目名 (不阻塞 UI)
+    local cbm_warmed = {}
+    vim.api.nvim_create_autocmd({ "BufEnter", "DirChanged" }, {
+        group = vim.api.nvim_create_augroup("codegraph_cbm_warm", { clear = true }),
+        callback = function()
+            local c = config.get().codebase_memory
+            if not c or c.enabled == false then
+                return
+            end
+            vim.schedule(function()
+                local ctx = project.context()
+                if not ctx or not ctx.root or cbm_warmed[ctx.root] then
+                    return
+                end
+                cbm_warmed[ctx.root] = true
+                local ok, cbm = pcall(require, "codegraph.source.codebase_memory")
+                if ok and cbm and cbm.warmup then
+                    cbm.warmup(ctx)
+                end
+            end)
+        end,
+    })
+
     -- 退出时把 MCP 常驻进程收掉 (它同时也是文件监视的那只 daemon)
     vim.api.nvim_create_autocmd("VimLeavePre", {
         once = true,
         callback = function()
             require("codegraph.mcp").stop_all()
+            require("codegraph.mcp_cbm").stop()
         end,
     })
 

@@ -152,6 +152,22 @@ codegraph 在项目根建一个 `.codegraph/`：
 而 `sqlite3` 一条 `LIKE` 查询在 2 万节点的库上约 10~20ms（含进程启动）。搜索要"边输边查"，
 只能走直读。`codegraph` CLI 负责写（sync/index），SQLite 负责读（WAL 允许读写并发）。
 
+### 4.1 codebase-memory 增强（可选，自动退化）
+
+装了 [`codebase-memory-mcp`](https://github.com/coffeeCatCode) 且当前项目建过它的索引时，
+插件会**自动接上它**，补 codegraph 没有的数据；没装 / 没索引 / 索引过期就静默退回
+codegraph，原来的用法完全不变。
+
+| 场景 | 实际走哪 | 说明 |
+| --- | --- | --- |
+| `p->field` / `obj.field` 结构体成员 | **codebase-memory `Field`** → codegraph 类型推断 | codegraph 不索引成员；有 Field 就跳字段定义行，没有才退回"按 base 类型跳 struct" |
+| 宏（尤其对象式 `#define X`） | **codebase-memory `Macro`** → rg 兜底 | codegraph 只索引函数式宏 |
+| 普通符号（函数/类/枚举） | **codegraph** → codebase-memory → coc | 声明/实现互跳仍由 codegraph 负责（codebase-memory 没有这个概念） |
+| `<Leader>gr` 搜索 | codegraph 结果 **+** codebase-memory 结果（BM25） | 按 `文件:行:名` 去重；索引没预热好时跳过，不拖慢输入 |
+
+冷启动约 1s（进项目时后台拉起，不阻塞 UI），之后每次查询 ~10ms；退出 nvim 时把进程清掉。
+项目名按 `list_projects` 的 `root_path` 最长前缀匹配，子目录里的 buffer 也能对上。
+
 ---
 
 ## 5. 项目定位（那条"往上找"的规则）
@@ -303,6 +319,14 @@ require("codegraph").setup({
     source = "auto",     -- auto | codegraph | codegraph_mcp | codegraph_cli | ripgrep
     -- auto 的探测顺序: 直读 -> MCP 兼容层 -> CLI 兜底
     sources = { "codegraph", "codegraph_mcp", "codegraph_cli" },
+
+    -- codebase-memory-mcp: 补 codegraph 没有的能力 (字段/宏/BM25), 自动退化
+    codebase_memory = {
+        enabled = true,
+        cmd = { "codebase-memory-mcp" },
+        timeout = 2500,      -- 单次 tools/call 超时
+        search_limit = 100,  -- 搜索时最多并入多少条
+    },
 
     project = {
         index_dir = ".codegraph",
@@ -568,6 +592,9 @@ nvim --headless -u ~/.config/nvim/local/codegraph.nvim/tests/minimal_init.lua \
 
 - **codegraph 的 `start_column` 不可靠**（C/C++ 常年是 0）：跳转定位靠"在目标行里找符号名"，
   名字在目标行出现多次时取第一个；找不到才退回行首。
+- **codebase-memory 是可选增强**：它按项目单独建索引（`~/.cache/codebase-memory-mcp/`），
+  索引过期/项目搬过家时 `gd` 可能落在旧行号；`<Leader>gd` 优先 codegraph、搜不到才问它，
+  所以日常路径不受影响。它也没有"声明/实现"概念，互跳永远由 codegraph 负责。
 - **对象式宏不在图谱里**：`#define NAME ...` 不建节点，`gd` 靠 `rg` 补找（第 7 节第 9 条），
   能跳但 `<Leader>gr` 搜不到；`#define NAME(x)` 这类函数式宏是 `constant` 节点，两者都正常。
 - **结构体成员不在图谱里**：codegraph 只索引 `struct/class` 类型，没有字段节点。`gd` 靠

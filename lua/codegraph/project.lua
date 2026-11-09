@@ -46,19 +46,23 @@ function M.start_dir(path)
     if not name or name == "" then
         name = vim.api.nvim_buf_get_name(0)
     end
+    -- URI 类 buffer (health://, fugitive://, ...) 不是文件路径, 按 cwd 处理
+    if name and name:match("^%a[%w+.-]*://") then
+        name = nil
+    end
     if name and name ~= "" then
         local abs = vim.fs.normalize(name)
         local st = vim.uv.fs_stat(abs)
         if st and st.type == "file" then
-            return vim.fs.dirname(abs)
+            return vim.fs.normalize(vim.fn.fnamemodify(abs, ":p:h"))
         end
         -- 新文件还没落盘: 只要父目录存在就从父目录找
         local dir = vim.fs.dirname(abs)
         if dir and dir ~= "" and vim.uv.fs_stat(dir) then
-            return dir
+            return vim.fs.normalize(vim.fn.fnamemodify(dir, ":p"))
         end
     end
-    return vim.fs.normalize(vim.fn.getcwd())
+    return vim.fs.normalize(vim.fn.fnamemodify(vim.fn.getcwd(), ":p"))
 end
 
 --- 检查某一层目录是不是索引根

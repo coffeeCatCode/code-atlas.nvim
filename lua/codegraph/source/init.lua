@@ -33,7 +33,7 @@ local M = {}
 M.registry = {}
 
 --- 内置适配器 (按 auto 模式下的探测顺序)
-M.builtin = { "codegraph", "codegraph_mcp", "codegraph_cli", "ripgrep" }
+M.builtin = { "codegraph", "codegraph_mcp", "codegraph_cli", "codebase_memory", "ripgrep" }
 
 M.loaded = false
 

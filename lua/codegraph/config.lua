@@ -212,6 +212,15 @@ M.defaults = {
     -- ======================================================================
     -- MCP (codegraph serve --mcp): 兼容层, 直读 SQLite 失效时自动顶上
     -- ======================================================================
+    -- codebase-memory-mcp: 补 codegraph 没有的能力 (字段/宏/语义搜索)
+    -- 有索引就用, 没索引/没装就自动退回 codegraph, 不影响原有行为
+    codebase_memory = {
+        enabled = true,
+        cmd = { "codebase-memory-mcp" },
+        timeout = 2500,      -- 单次 tools/call 超时 (冷启动由 mcp_cbm 单独等)
+        search_limit = 100,  -- 搜索时最多并入多少条
+    },
+
     mcp = {
         enabled = true,
         -- 工具面按仓库大小动态裁剪, 用这个变量点名要哪些 (小仓库默认只给 explore)

@@ -147,6 +147,15 @@ telescope 扩展:                                     *:Telescope codegraph*
 `source = "auto"` 时按 `sources` 顺序挑第一个可用的:
     sources = { "codegraph", "codegraph_mcp", "codegraph_cli" }
 
+                                    *codegraph-codebase-memory*
+codebase-memory 增强 (codebase_memory.enabled, 默认开):
+装了 codebase-memory-mcp 且当前项目有它的索引时:
+    - gd 对结构体成员/宏先问它 (Field/Macro 节点), 普通符号和声明/实现互跳仍走 codegraph
+    - gr 合并两边的搜索结果 (按 文件:行:名 去重), 索引没预热好时跳过
+    - 没装/没索引/索引过期就自动退回 codegraph, 行为不变
+    - 冷启动 ~1s (进项目时后台拉起, 不阻塞 UI), 热态 ~10ms, 退出时清理
+    codebase_memory = { enabled = true, cmd = { "codebase-memory-mcp" }, timeout = 2500 }
+
                                           *codegraph-schema-drift*
 直读前会 PRAGMA table_info(nodes) 校验必需列; 缺列/运行中报 no such column
 就把这个源标记为不可用, auto 自动换下一个 (通常是 MCP)。:checkhealth 里有显示。

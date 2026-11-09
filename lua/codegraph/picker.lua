@@ -236,6 +236,47 @@ local function merge_parent_results(ctx, items, prompt, opts)
     return items
 end
 
+--- 把 codebase-memory 的搜索结果并进来 (有索引/已预热才查, 否则静默跳过)
+---@param ctx table
+---@param items table[]
+---@param prompt string
+---@param opts table
+---@return table[]
+local function merge_cbm_results(ctx, items, prompt, opts)
+    local cfg = config.get()
+    if not cfg.codebase_memory or cfg.codebase_memory.enabled == false or prompt == "" then
+        return items
+    end
+    local ok, source = pcall(require, "codegraph.source")
+    if not ok then
+        return items
+    end
+    source.load()
+    local adapter = source.get("codebase_memory")
+    if not adapter or not adapter.available(ctx) then
+        return items
+    end
+    local ok2, more = pcall(adapter.search, ctx, prompt, {
+        limit = cfg.codebase_memory.search_limit or 100,
+    })
+    if not ok2 or type(more) ~= "table" then
+        return items
+    end
+
+    local seen = {}
+    for _, it in ipairs(items) do
+        seen[(it.file or "") .. ":" .. tostring(it.line or 0) .. ":" .. tostring(it.name or "")] = true
+    end
+    for _, it in ipairs(more) do
+        local key = (it.file or "") .. ":" .. tostring(it.line or 0) .. ":" .. tostring(it.name or "")
+        if not seen[key] then
+            seen[key] = true
+            items[#items + 1] = it
+        end
+    end
+    return items
+end
+
 --- 异步 finder: 给 MCP 这种"请求-响应"型数据源用, 不阻塞 UI
 --- telescope 的 finder 是可调用对象, 结果由 process_result/process_complete 回填
 ---@param adapter table
@@ -255,6 +296,7 @@ local function async_finder(adapter, ctx, opts, entry_maker)
         end
         adapter.search_async(ctx, prompt, opts, function(items)
             items = merge_parent_results(ctx, items or {}, prompt, opts)
+            items = merge_cbm_results(ctx, items, prompt, opts)
             for _, item in ipairs(items) do
                 local entry = entry_maker(item)
                 if entry and process_result(entry) then
@@ -314,7 +356,8 @@ local function new_finder(kind, ctx, adapter, opts)
                 if not ok then
                     return {}
                 end
-                return merge_parent_results(ctx, items or {}, prompt, opts)
+                items = merge_parent_results(ctx, items or {}, prompt, opts)
+                return merge_cbm_results(ctx, items, prompt, opts)
             end,
         })
     end
