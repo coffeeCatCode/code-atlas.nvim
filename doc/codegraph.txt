@@ -1,0 +1,231 @@
+*codegraph.txt*  把 codegraph 代码图谱接到 Neovim
+
+                            codegraph.nvim
+                  作者: coffee   需要: nvim >= 0.10, telescope.nvim
+
+==============================================================================
+CONTENTS                                              *codegraph-contents*
+
+    1. 简介 ................................... |codegraph-intro|
+    2. 键位 ................................... |codegraph-keymaps|
+    3. 命令 ................................... |codegraph-commands|
+    4. 配置 ................................... |codegraph-config|
+    5. 数据源 (可插拔) ........................ |codegraph-sources|
+    6. 项目定位 ............................... |codegraph-project|
+    7. 索引新鲜度 ............................. |codegraph-watcher|
+    8. 排错 ................................... |codegraph-health|
+
+==============================================================================
+1. 简介                                                *codegraph-intro*
+
+codegraph 是给 AI 用的代码图谱: 在项目根生成 `.codegraph/codegraph.db`
+(SQLite + WAL), 里面是符号 (nodes) 和调用/引用关系 (edges)。
+
+本插件直读这个库来:
+
+    - 搜索符号, 用 telescope 展示          |codegraph-search|
+    - 跳转定义/声明, 多个结果时列表选择     |codegraph-definition|
+    - 看引用 / 调用者 / 被调用者
+    - 管理索引同步 (保存后同步 / 后台守护 / 轮询)
+
+数据源是可插拔的: `codegraph` (SQLite 直读) / `codegraph_mcp` (兼容层) /
+`codegraph_cli` / `ripgrep`。详见 |codegraph-sources|。
+
+==============================================================================
+2. 键位                                             *codegraph-keymaps*
+
+默认键位 (全部可配置, 设 `false` 关掉): >lua
+
+    <Leader>gr   搜索符号 (边输边查)                    |codegraph-search|
+    <Leader>gd   跳转定义或声明 (声明/实现互跳, 光标落在符号上)
+                多个结果时列表选择                      |codegraph-definition|
+    <Leader>gR   引用
+    <Leader>gc   调用者
+    <Leader>gC   被调用
+    <Leader>gf   索引里的文件
+    <Leader>gs   索引状态
+    <Leader>gy   立即同步索引
+<
+注意: 默认会接管 coc 的 `<Leader>gr` (引用列表), 见 |codegraph-coc|。
+
+                                                      *codegraph-search*
+<Leader>gr: 打开时把光标下的词预填进 prompt (search.prefill),
+结果里同时有定义和"调用/引用点" (search.include_usages, 数据来自 edges):
+`[call] 被调符号  ← 调用者  path:line`, 回车直接跳到调用行。
+
+                                                   *codegraph-definition*
+<Leader>gd: 光标下的 <cWORD> 去括号后先按限定名查, 没有命中再按短名查。
+在 .h/.hpp 里按优先找实现, 在 .c/.cpp 里按优先找声明 (definition.toggle);
+唯一候选直接跳, 多个才弹 telescope 列表。跳转后光标会落在符号名上
+(codegraph 的 start_column 对 C/C++ 不可靠), 所以连按两次就在声明和实现之间来回跳。
+
+codegraph 不给 C/C++ 头文件里的函数原型建节点, 索引里找不到声明时, 插件会用
+rg 在 *.h/*.hpp 里补找原型 (以 ; 结尾、无 {、非 typedef/#define), 同名头文件优先。
+
+picker 内额外映射:
+    <C-q>        全部结果放入 quickfix 并打开
+    <Tab>        多选
+
+                                                        *codegraph-coc*
+原 coc 的 `<Leader>gr` (引用) 让位给 codegraph 搜索; 想保留就改
+`keymaps.search`, 或用 coc 原生的 `gr`。引用可以用 `<Leader>gR` 看 (走图谱)。
+
+==============================================================================
+3. 命令                                            *codegraph-commands*
+
+:CodeGraph [子命令] [参数]                              *:CodeGraph*
+
+    search [词]               搜索 picker
+    definition [名]           定义/声明 (带名字时直接查这个名字)
+    references|refs [名]      引用
+    callers [名]              调用者
+    callees [名]              被调用
+    files                     索引里的文件
+    status|info               索引状态
+    sync                      跑 `codegraph sync -q`
+    index [--force]           全量重建 (会二次确认)
+    daemon status|start|stop  管理 codegraph 后台守护进程
+    root [路径]               手动指定/清除项目根 (临时生效)
+    doctor|health             :checkhealth codegraph
+
+telescope 扩展:                                     *:Telescope codegraph*
+    :Telescope codegraph search
+    :Telescope codegraph definition
+    :Telescope codegraph references
+    :Telescope codegraph callers
+    :Telescope codegraph callees
+    :Telescope codegraph files
+
+==============================================================================
+4. 配置                                                *codegraph-config*
+
+>lua
+    require("codegraph").setup({
+        source = "auto",                             -- |codegraph-sources|
+        sources = { "codegraph", "codegraph_cli" },
+        project = { index_dir = ".codegraph", db_file = "codegraph.db" },
+        search = { limit = 400, debounce = 120, min_prompt = 1,
+                   prefill = "cword", empty_prompt = "none",
+                   include_usages = true, usage_limit = 200,
+                   search_parents = true, max_parents = 2 },
+        definition = { jump_single = true, fallback = "coc", toggle = true,
+                       search_parents = true, max_parents = 3 },
+        keymaps = { search = "<Leader>gr", definition = "<Leader>gd" },
+        watcher = { mode = "auto" },                 -- |codegraph-watcher|
+    })
+<
+完整默认值见 `lua/codegraph/config.lua`。常改的:
+
+    search.debounce       输入停顿多少 ms 才查一次 (默认 120, 大库调大)
+    search.prefill        打开时预填光标下的词 (cword | none)
+    search.include_usages 结果里带上调用/引用点 (edges 的 calls/references)
+    search.limit          结果上限 (默认 400)
+    search.match_docstring  关掉能明显提速
+    definition.fallback   查不到时的兜底: "coc" | "lsp" | ""
+    definition.prefer_impl  头文件里的声明让位给实现 (C/C++)
+    preview.enabled       关掉右侧预览窗
+
+==============================================================================
+5. 数据源 (可插拔)                                  *codegraph-sources*
+
+内置:
+
+    codegraph      直读 .codegraph/codegraph.db (默认, 最快, 数据最全)
+    codegraph_mcp  常驻 `codegraph serve --mcp`, 走它自己的工具接口
+                   (表结构改了也能用; 冷启动 4~6s, 热态 1ms; 返回 markdown)
+    codegraph_cli  调 `codegraph query/status/files/callers -j` (最后兜底, 300ms/次)
+    ripgrep        `rg --json` 文本匹配 (默认不启用)
+
+`source = "auto"` 时按 `sources` 顺序挑第一个可用的:
+    sources = { "codegraph", "codegraph_mcp", "codegraph_cli" }
+
+                                          *codegraph-schema-drift*
+直读前会 PRAGMA table_info(nodes) 校验必需列; 缺列/运行中报 no such column
+就把这个源标记为不可用, auto 自动换下一个 (通常是 MCP)。:checkhealth 里有显示。
+
+MCP 相关配置:
+    mcp = {
+        enabled = true,
+        tools = "search,callers,callees,files,status,node",
+        cmd = { "codegraph", "serve", "--mcp" },
+        timeout = 8000,
+        kill_on_exit = true,
+    }
+    -- 也可以直接 source = "codegraph_mcp" 强制走 MCP
+
+                                         *codegraph-source-register*
+自己加数据源: 实现下面几个函数, 然后注册:
+
+>lua
+    local M = { name = "mine", label = "我的源", priority = 100 }
+    function M.available(ctx) return true end
+    function M.search(ctx, prompt, opts) return { item, ... } end
+    function M.definition(ctx, name, opts) return {} end
+    function M.references(ctx, name, opts) return {} end
+    function M.files(ctx, opts) return {} end
+    function M.status(ctx) return { nodes = 0 } end
+    require("codegraph.source").register(M)
+<
+item 字段:
+    { id, kind, name, qualified_name,
+      path,        -- 相对项目根, 展示用
+      file,        -- 绝对路径, 跳转/预览用
+      line, end_line, signature, doc, source }
+
+可选: callers / callees / sync / reindex / supports = { references = false }。
+
+==============================================================================
+6. 项目定位                                         *codegraph-project*
+
+从当前文件所在目录开始逐级向上找 `<dir>/.codegraph/codegraph.db`:
+
+    - 找到真的 SQLite 文件 (校验文件头) 就用它;
+    - 某层只有空的 .codegraph 目录 (比如 ~/.codegraph 只有后台 state)
+      会跳过, 继续向上;
+    - 一直找到 / 都没有 -> 插件不启用, 只提示一句 (不会退化成 grep)。
+
+多级索引: <Leader>gd 和 <Leader>gr 都会合并上级 .codegraph
+(gd: definition.search_parents/max_parents; gr: search.search_parents/max_parents),
+只向上找, 不向下找; 每个上级索引最多取 search.max_parent_results 条。
+
+`:CodeGraph root /path` 可以临时指定根, `:CodeGraph root` 清除。
+
+==============================================================================
+7. 索引新鲜度                                       *codegraph-watcher*
+
+`watcher.mode`:
+
+    "auto"     已有后台就白嫖, 没有就保存时自己 sync (默认)
+    "daemon"   进项目就确保 `codegraph serve --mcp` 在跑 (它自己监视文件)
+    "on_save"  只在保存时 sync (防抖 1.5s, 最小间隔 5s)
+    "poll"     每 120s 看一次 pendingChanges, 有变化才 sync
+    "off"      完全手动
+
+>lua
+    watcher = {
+        mode = "auto",
+        daemon = { autostart = false, stop_on_exit = false, max_files = 20000 },
+        on_save = { debounce = 1500, min_interval = 5000 },
+        poll = { interval = 120 },
+        ignore = { "/%.codegraph/", "/%.git/", "/build/" },
+    }
+<
+`codegraph serve --mcp` 空闲 300s 会自己退出; `daemon.pid` 残留时会核对
+`/proc/<pid>/cmdline`, 不会把 pid 复用误判成"后台在跑"。
+
+==============================================================================
+8. 排错                                               *codegraph-health*
+
+    :checkhealth codegraph
+
+检查 nvim/telescope/sqlite3/codegraph、索引根与库、节点数、最近索引时间、
+待同步、数据源可用性、watcher 模式与后台、键位绑定。
+
+常见:
+
+    没找到 .codegraph/codegraph.db     项目没建索引: 在项目根 `codegraph init`
+    <Leader>gr 弹 coc 的引用            插件没加载/顺序不对: lazy=false, priority=40
+    结果很旧                            :CodeGraph sync, 或 watcher.mode = "daemon"
+    sqlite3 不在 PATH                   source = "codegraph_cli" (会慢)
+
+vim:tw=78:ts=8:ft=help:norl:
