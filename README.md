@@ -1,8 +1,8 @@
-# codegraph.nvim
+# code-atlas.nvim
 
 > 作者：[coffee](https://github.com/coffeeCatCode) · MIT License
 
-把 **codegraph**（给 AI 用的代码图谱）接到 Neovim：搜索符号、跳转定义/声明、看引用和调用关系，
+把 **code-atlas**（给 AI 用的代码图谱）接到 Neovim：搜索符号、跳转定义/声明、看引用和调用关系，
 结果用 **telescope** 展示。
 
 - 数据来源：项目根下的 `.codegraph/codegraph.db`（SQLite，WAL 模式）
@@ -13,7 +13,7 @@
 - 表结构变了不会瞎跑：直读前先 `PRAGMA table_info` 校验，缺列就自动退到 MCP / CLI
 - 索引新鲜度可配：保存后自动 `sync`、常驻后台、定时轮询，或完全手动
 
-> 本插件直接放在配置目录里：`~/.config/nvim/local/codegraph.nvim/`，
+> 本插件直接放在配置目录里：`~/.config/nvim/local/code-atlas.nvim/`，
 > 由 `lua/plugins.lua` 里的一条 `dir = ...` 规格加载（见下文「接入」）。
 
 ---
@@ -55,12 +55,12 @@ lazy.nvim（从 GitHub 装）：
 
 ```lua
 {
-    "you/codegraph.nvim",      -- 换成你的仓库地址
+    "you/code-atlas.nvim",      -- 换成你的仓库地址
     lazy = false,              -- 要在 coc 之后注册键位，不能懒加载
     priority = 40,             -- < coc 的 50，保证 setup 在 coc 之后跑
     opts = {},                 -- 见第 8 节
     config = function(_, opts)
-        require("codegraph").setup(opts)
+        require("code_atlas").setup(opts)
     end,
 },
 ```
@@ -69,13 +69,13 @@ lazy.nvim（从 GitHub 装）：
 
 ```lua
 {
-    "codegraph.nvim",
-    dir = vim.fn.expand("~/path/to/codegraph.nvim"),
+    "code-atlas.nvim",
+    dir = vim.fn.expand("~/path/to/code-atlas.nvim"),
     lazy = false,
     priority = 40,
     opts = {},
     config = function(_, opts)
-        require("codegraph").setup(opts)
+        require("code_atlas").setup(opts)
     end,
 },
 ```
@@ -91,7 +91,7 @@ coc 的映射会先命中。telescope 不需要写进 `dependencies`——插件
 ## 3. 命令
 
 ```
-:CodeGraph [子命令] [参数]
+:CodeAtlas [子命令] [参数]
 ```
 
 | 子命令 | 说明 |
@@ -106,17 +106,17 @@ coc 的映射会先命中。telescope 不需要写进 `dependencies`——插件
 | `index [--force]` | 全量重建（会二次确认） |
 | `daemon status\|start\|stop` | 管理 codegraph 后台守护进程 |
 | `root [路径]` | 手动指定/清除项目根（临时用，不写进配置） |
-| `doctor` / `health` | `:checkhealth codegraph` |
+| `doctor` / `health` | `:checkhealth code_atlas` |
 
 telescope 扩展：
 
 ```
-:Telescope codegraph search
-:Telescope codegraph definition
-:Telescope codegraph references
-:Telescope codegraph callers
-:Telescope codegraph callees
-:Telescope codegraph files
+:Telescope code_atlas search
+:Telescope code_atlas definition
+:Telescope code_atlas references
+:Telescope code_atlas callers
+:Telescope code_atlas callees
+:Telescope code_atlas files
 ```
 
 ---
@@ -162,7 +162,7 @@ codegraph，原来的用法完全不变。
 | --- | --- | --- |
 | `p->field` / `obj.field` 结构体成员 | **codebase-memory `Field`** → codegraph 类型推断 | codegraph 不索引成员；有 Field 就跳字段定义行，没有才退回"按 base 类型跳 struct" |
 | 宏（尤其对象式 `#define X`） | **codebase-memory `Macro`** → rg 兜底 | codegraph 只索引函数式宏 |
-| 普通符号（函数/类/枚举） | **codegraph** → codebase-memory → coc | 声明/实现互跳仍由 codegraph 负责（codebase-memory 没有这个概念） |
+| 普通符号（函数/类/枚举） | **code-atlas** → codebase-memory → coc | 声明/实现互跳仍由 codegraph 负责（codebase-memory 没有这个概念） |
 | `<Leader>gr` 搜索 | codegraph 结果 **+** codebase-memory 结果（BM25） | 按 `文件:行:名` 去重；索引没预热好时跳过，不拖慢输入 |
 
 冷启动约 1s（进项目时后台拉起，不阻塞 UI），之后每次查询 ~10ms；退出 nvim 时把进程清掉。
@@ -217,7 +217,7 @@ definition = {
 },
 ```
 
-手动指定根（不写配置，重启失效）：`:CodeGraph root /path/to/project`，清除：`:CodeGraph root`。
+手动指定根（不写配置，重启失效）：`:CodeAtlas root /path/to/project`，清除：`:CodeAtlas root`。
 
 ---
 
@@ -238,7 +238,7 @@ codegraph serve --mcp -p <项目根>
 | `"daemon"` | 进项目就确保后台在跑（挂了会重拉），文件变化由它自己处理 | 想让索引始终最新 |
 | `"on_save"` | 只在你保存时 `codegraph sync -q`（防抖 1.5s、两次至少间隔 5s） | 不想多一个常驻进程 |
 | `"poll"` | 每 120s 跑一次 `codegraph status -j`，`pendingChanges > 0` 才 sync | 经常用 git 切分支/改文件 |
-| `"off"` | 完全不管，只用 `:CodeGraph sync` 手动同步 | 调试 / 老机器 |
+| `"off"` | 完全不管，只用 `:CodeAtlas sync` 手动同步 | 调试 / 老机器 |
 
 ```lua
 watcher = {
@@ -255,7 +255,7 @@ watcher = {
 },
 ```
 
-手动控制：`:CodeGraph daemon start|stop|status`，状态里会显示 pid（判定存活时会核对
+手动控制：`:CodeAtlas daemon start|stop|status`，状态里会显示 pid（判定存活时会核对
 `/proc/<pid>/cmdline`，避免 pid 被别的进程复用导致误判）。
 
 ---
@@ -308,14 +308,14 @@ watcher = {
    `#define F 1` 这种对象式宏完全不在索引里。`gd` 找不到时会用 `rg` 在项目里搜
    `^#define <name>`，命中就跳过去（`definition.macro_fallback = false` 可关）。
 10. 一个都没有 → 按 `definition.fallback` 交给 coc（喂 `<Plug>(coc-definition)`），
-   没有 coc 就提示"索引可能过期，试 `:CodeGraph sync`"。
+   没有 coc 就提示"索引可能过期，试 `:CodeAtlas sync`"。
 
 ---
 
 ## 8. 配置项
 
 ```lua
-require("codegraph").setup({
+require("code_atlas").setup({
     source = "auto",     -- auto | codegraph | codegraph_mcp | codegraph_cli | ripgrep
     -- auto 的探测顺序: 直读 -> MCP 兼容层 -> CLI 兜底
     sources = { "codegraph", "codegraph_mcp", "codegraph_cli" },
@@ -406,14 +406,14 @@ require("codegraph").setup({
 })
 ```
 
-<!-- 配置项以 lua/codegraph/config.lua 的 defaults 为准，这里只列常改的 -->
-完整默认值见 [`lua/codegraph/config.lua`](lua/codegraph/config.lua)。
+<!-- 配置项以 lua/code_atlas/config.lua 的 defaults 为准，这里只列常改的 -->
+完整默认值见 [`lua/code_atlas/config.lua`](lua/code_atlas/config.lua)。
 
 ---
 
 ## 9. 数据源适配器（"可适配插件"那一层）
 
-内置四个（`lua/codegraph/source/`）：
+内置四个（`lua/code_atlas/source/`）：
 
 | 名字 | 干什么 | 何时用 |
 | --- | --- | --- |
@@ -432,7 +432,7 @@ require("codegraph").setup({
    file_path/start_line/end_line`），结果按 db 的 mtime 缓存；
 2. 校验不过 → 这个源 `available()` 返回 false，auto 自动换下一个（通常是 `codegraph_mcp`）；
 3. 运行中某条 SQL 报 `no such column` 之类，也会把该源标记为 broken，下一次直接换源；
-4. `:checkhealth codegraph` 会显示"表结构与直读 SQL 匹配"或具体缺哪一列。
+4. `:checkhealth code_atlas` 会显示"表结构与直读 SQL 匹配"或具体缺哪一列。
 
 MCP 这条路的兼容性由 codegraph 自己负责（工具接口是它的公开面），但代价见上表。
 
@@ -464,7 +464,7 @@ function M.references(ctx, name, opts) return {} end
 function M.files(ctx, opts) return {} end
 function M.status(ctx) return { nodes = 0 } end
 
-require("codegraph.source").register(M)
+require("code_atlas.source").register(M)
 ```
 
 契约全表（除 `name` 外都可以不实现，缺的能力会提示"数据源不支持"）：
@@ -503,10 +503,10 @@ sources = { "codegraph", "codegraph_cli", "ripgrep" },
 
 ```lua
 -- lualine
-lualine_x = { function() return require("codegraph").statusline() end },
+lualine_x = { function() return require("code_atlas").statusline() end },
 ```
 
-有索引时显示 `cg:595`（节点数，30s 缓存），没有索引显示空。不想要就 `statusline = false`。
+有索引时显示 `atlas:595`（节点数，30s 缓存），没有索引显示空。不想要就 `statusline = false`。
 
 ---
 
@@ -555,7 +555,7 @@ lualine_x = { function() return require("codegraph").statusline() end },
 ## 12. 排错
 
 ```
-:checkhealth codegraph
+:checkhealth code_atlas
 ```
 
 会检查：nvim 版本、telescope、`sqlite3`/`codegraph` 可执行文件与版本、索引根与 db 大小、
@@ -567,11 +567,11 @@ lualine_x = { function() return require("codegraph").statusline() end },
 | --- | --- |
 | `没找到 .codegraph/codegraph.db (已从 ... 逐级向上找)` | 项目没建索引。在项目根跑 `codegraph init`；或者这个项目就是不想用 |
 | `<Leader>gr` 没反应 / 弹 coc 的引用 | 插件没加载或加载顺序不对：确认 `lazy = false`、`priority = 40` |
-| 搜索结果是旧的 | `:CodeGraph sync`；或把 `watcher.mode` 改成 `"daemon"` |
+| 搜索结果是旧的 | `:CodeAtlas sync`；或把 `watcher.mode` 改成 `"daemon"` |
 | `sqlite3: command not found` | 装 sqlite3；或 `source = "codegraph_cli"`（会慢很多） |
 | 预览窗报 `attempt to index vim.NIL` | 老版本 bug，已修（JSON null 统一解成 nil）；升级插件文件即可 |
 | 补全时报 `E474: String "<c9><f9>..." contains byte that does not start any UTF-8` | 不是本插件：codeium 会把所有已加载 buffer 原文塞进请求，GBK 源码/telescope 结果里的非 UTF-8 字节让 `json_encode` 失败。已在 `lua/codeium_fix.lua` 打补丁（过滤非法 UTF-8 文档） |
-| 后台状态显示 running 但其实是残留 pid | 已核对 `/proc/<pid>/cmdline`；仍不对就 `:CodeGraph daemon stop` 再 start |
+| 后台状态显示 running 但其实是残留 pid | 已核对 `/proc/<pid>/cmdline`；仍不对就 `:CodeAtlas daemon stop` 再 start |
 
 ---
 
@@ -579,8 +579,8 @@ lualine_x = { function() return require("codegraph").statusline() end },
 
 ```bash
 cd /path/to/一个有索引的项目
-nvim --headless -u ~/.config/nvim/local/codegraph.nvim/tests/minimal_init.lua \
-     -c "luafile ~/.config/nvim/local/codegraph.nvim/tests/selftest.lua" -c "qa!"
+nvim --headless -u ~/.config/nvim/local/code-atlas.nvim/tests/minimal_init.lua \
+     -c "luafile ~/.config/nvim/local/code-atlas.nvim/tests/selftest.lua" -c "qa!"
 ```
 
 `tests/manual/` 下是几个手动用例（picker 实测、多定义、后台守护、保存同步、轮询同步、健康检查），
@@ -590,7 +590,7 @@ nvim --headless -u ~/.config/nvim/local/codegraph.nvim/tests/minimal_init.lua \
 
 ## 14. 已知限制
 
-- **codegraph 的 `start_column` 不可靠**（C/C++ 常年是 0）：跳转定位靠"在目标行里找符号名"，
+- **code-atlas 的 `start_column` 不可靠**（C/C++ 常年是 0）：跳转定位靠"在目标行里找符号名"，
   名字在目标行出现多次时取第一个；找不到才退回行首。
 - **codebase-memory 是可选增强**：它按项目单独建索引（`~/.cache/codebase-memory-mcp/`），
   索引过期/项目搬过家时 `gd` 可能落在旧行号；`<Leader>gd` 优先 codegraph、搜不到才问它，
@@ -602,7 +602,7 @@ nvim --headless -u ~/.config/nvim/local/codegraph.nvim/tests/minimal_init.lua \
   时只能交给 coc。多个同名结构体（比如仓库里有份 `audit/` 拷贝）会弹列表。
 - **多级索引只向上找**：`gd` 和 `gr` 都会合并上级索引，但从父仓库打开文件不会反查子模块索引。
   合并父索引会让每次搜索多花约 15ms/层（只查有索引的祖先）。
-- **codegraph 不索引 C/C++ 头文件里的函数原型**：`.h` 里通常只有 `enum/struct/宏` 有节点，
+- **code-atlas 不索引 C/C++ 头文件里的函数原型**：`.h` 里通常只有 `enum/struct/宏` 有节点，
   `uint8_t Foo(int);` 这种原型没有。插件靠 `rg` 在头文件里补找（见第 7 节第 7 条），
   所以"从 .c 跳 .h"能用，但不属于图谱数据，而是文件搜索的结果。
 - **"声明 vs 定义"靠文件后缀猜**：`.h/.hpp` 算声明，`.c/.cpp` 算实现。codegraph 的

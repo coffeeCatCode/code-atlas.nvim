@@ -1,12 +1,12 @@
 -- ============================================================================
--- codegraph.nvim: 项目定位
+-- code-atlas.nvim: 项目定位
 -- 规则: 从当前文件所在目录开始, 逐级向上找 <dir>/.codegraph/codegraph.db,
 --       找到就用它; 一直找到 / 都没有, 就说明这个项目没建过索引 (不启用)。
 -- 注: 家目录下的 ~/.codegraph 往往只有守护进程的 state 而没有 db,
 --     这里以"db 是不是真的 SQLite 文件"为准, 空壳目录会被跳过继续向上。
 -- ============================================================================
 
-local config = require("codegraph.config")
+local config = require("code_atlas.config")
 
 local M = {}
 
@@ -161,7 +161,7 @@ function M.find_all(start)
     return out
 end
 
--- 手动指定的项目根 (:CodeGraph root /path)
+-- 手动指定的项目根 (:CodeAtlas root /path)
 M.override = nil
 
 ---@param path string|nil
@@ -195,7 +195,7 @@ function M.context_for_file(file)
         return nil
     end
     local ctx = M.context(file)
-    if ctx and require("codegraph.util").under(ctx.root, file) then
+    if ctx and require("code_atlas.util").under(ctx.root, file) then
         return ctx
     end
     return nil
@@ -206,7 +206,7 @@ end
 ---@param file string
 ---@return string|nil rel
 function M.rel_in_index(ctx, file)
-    local rel = require("codegraph.util").relpath(ctx.root, file)
+    local rel = require("code_atlas.util").relpath(ctx.root, file)
     if rel == file then
         return nil
     end

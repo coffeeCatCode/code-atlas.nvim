@@ -1,5 +1,5 @@
-local ctx = require("codegraph.project").context()
-local a = require("codegraph.source").resolve(ctx)
+local ctx = require("code_atlas.project").context()
+local a = require("code_atlas.source").resolve(ctx)
 local function bench(label, fn, n)
   local t = vim.uv.hrtime()
   local last

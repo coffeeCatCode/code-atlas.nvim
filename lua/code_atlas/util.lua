@@ -1,5 +1,5 @@
 -- ============================================================================
--- codegraph.nvim: 小工具 (通知 / 子进程 / SQL 转义 / 路径)
+-- code-atlas.nvim: 小工具 (通知 / 子进程 / SQL 转义 / 路径)
 -- ============================================================================
 
 local M = {}
@@ -7,13 +7,13 @@ local M = {}
 ---@param msg string
 ---@param level integer|nil
 function M.notify(msg, level)
-    local cfg = require("codegraph.config").get()
+    local cfg = require("code_atlas.config").get()
     level = level or vim.log.levels.INFO
     if not cfg.notify and level < vim.log.levels.WARN then
         return
     end
     vim.schedule(function()
-        vim.notify("[codegraph] " .. msg, level)
+        vim.notify("[code-atlas] " .. msg, level)
     end)
 end
 

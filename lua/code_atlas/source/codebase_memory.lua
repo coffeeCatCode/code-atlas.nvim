@@ -17,9 +17,9 @@ local M = {
     priority = 120,
 }
 
-local config = require("codegraph.config")
-local util = require("codegraph.util")
-local mcp = require("codegraph.mcp_cbm")
+local config = require("code_atlas.config")
+local util = require("code_atlas.util")
+local mcp = require("code_atlas.mcp_cbm")
 
 ---@type table<string, string|false>
 local project_cache = {}

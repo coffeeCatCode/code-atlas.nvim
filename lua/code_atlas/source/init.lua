@@ -1,8 +1,8 @@
 -- ============================================================================
--- codegraph.nvim: 数据源注册表 (可插拔适配层)
+-- code-atlas.nvim: 数据源注册表 (可插拔适配层)
 --
 -- 想接别的数据源 (LSP / ctags / tree-sitter / grep 服务...), 只要实现下面的
--- 契约再 require("codegraph.source").register() 一下即可, 上层 (telescope
+-- 契约再 require("code_atlas.source").register() 一下即可, 上层 (telescope
 -- picker / 键位 / 命令) 完全不用改。
 --
 -- 适配器契约 (除 name 外都可选, 缺哪个能力就返回空表):
@@ -24,7 +24,7 @@
 --     line, end_line, signature, doc, source(适配器名) }
 -- ============================================================================
 
-local config = require("codegraph.config")
+local config = require("code_atlas.config")
 
 local M = {}
 
@@ -59,11 +59,17 @@ function M.load()
         return
     end
     M.loaded = true
+    local loaded_any = false
     for _, name in ipairs(M.builtin) do
-        local ok, mod = pcall(require, "codegraph.source." .. name)
+        local ok, mod = pcall(require, "code_atlas.source." .. name)
         if ok and type(mod) == "table" then
             M.register(mod)
+            loaded_any = true
         end
+    end
+    -- 一个都没加载成功 (例如插件更新到一半), 下次 resolve 再试
+    if not loaded_any then
+        M.loaded = false
     end
 end
 

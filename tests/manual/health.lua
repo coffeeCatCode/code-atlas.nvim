@@ -8,7 +8,7 @@ h.error = function(m) out[#out + 1] = "ERR  " .. tostring(m) end
 h.info = function(m) out[#out + 1] = "info " .. tostring(m) end
 h.start = function(m) out[#out + 1] = "\n## " .. tostring(m) end
 
-local ok, err = pcall(require("codegraph.health").check)
+local ok, err = pcall(require("code_atlas.health").check)
 for k, v in pairs(orig) do h[k] = v end
 print("check ok =", ok, err or "")
 for _, l in ipairs(out) do print(l) end

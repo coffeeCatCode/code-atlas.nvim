@@ -3,8 +3,8 @@
 --   cd <子模块/子项目目录>
 --   CG_SYM=<只存在于上级索引的符号> nvim --headless -u tests/minimal_init.lua \
 --       -c "luafile tests/manual/multi_index.lua" -c "qa!"
-local cg = require("codegraph")
-local project = require("codegraph.project")
+local cg = require("code_atlas")
+local project = require("code_atlas.project")
 
 local sym = vim.env.CG_SYM
 if not sym or sym == "" then

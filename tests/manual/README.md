@@ -14,7 +14,7 @@ CG_SYMBOL=Foo CG_SRC=src/foo.c nvim --headless -u tests/minimal_init.lua \
 | `bench2.lua` | 带与不带调用点的搜索耗时对比 | — |
 | `daemon.lua` | 后台守护 start/stop/状态 | — |
 | `gd_c_proto.lua` | C 头文件原型兜底（.c → .h） | `CG_SRC`、`CG_SYM` |
-| `health.lua` | 抓取 `:checkhealth codegraph` 的输出 | — |
+| `health.lua` | 抓取 `:checkhealth code_atlas` 的输出 | — |
 | `mcp.lua` | MCP 数据源实测（需要 codegraph 可执行） | `CG_SYMBOL` |
 | `multi_index.lua` | 多级索引向上查找 | `CG_SYM` |
 | `roots.lua` | 从子目录向上找索引 | — |

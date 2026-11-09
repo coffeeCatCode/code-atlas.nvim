@@ -1,13 +1,13 @@
 -- ============================================================================
--- codegraph.nvim: telescope 展示层
+-- code-atlas.nvim: telescope 展示层
 --
 -- telescope 的 picker 接受任意"条目来源": finders.new_table (静态表) 或
 -- finders.new_dynamic (fn(prompt) 每次输入重新取), 所以 codegraph 的符号、
 -- 引用、文件都能直接塞进去, 不需要写新的 UI。
 -- ============================================================================
 
-local config = require("codegraph.config")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local util = require("code_atlas.util")
 
 local M = {}
 
@@ -50,7 +50,7 @@ end
 ---@param kind string
 ---@return string
 local function highlight(kind)
-    return "CodeGraph" .. (kind or "unknown")
+    return "CodeAtlas" .. (kind or "unknown")
 end
 
 -- ---------------------------------------------------------------------------
@@ -201,8 +201,8 @@ local function merge_parent_results(ctx, items, prompt, opts)
         return items
     end
 
-    local project = require("codegraph.project")
-    local source = require("codegraph.source")
+    local project = require("code_atlas.project")
+    local source = require("code_atlas.source")
     local seen = {}
     for _, it in ipairs(items) do
         seen[item_key(it)] = true
@@ -247,7 +247,7 @@ local function merge_cbm_results(ctx, items, prompt, opts)
     if not cfg.codebase_memory or cfg.codebase_memory.enabled == false or prompt == "" then
         return items
     end
-    local ok, source = pcall(require, "codegraph.source")
+    local ok, source = pcall(require, "code_atlas.source")
     if not ok then
         return items
     end
@@ -384,8 +384,8 @@ local TITLES = {
 ---@return table|nil
 function M.open(kind, opts)
     opts = opts or {}
-    local ctx = opts.ctx or require("codegraph.project").context()
-    local source = require("codegraph.source")
+    local ctx = opts.ctx or require("code_atlas.project").context()
+    local source = require("code_atlas.source")
     local adapter = opts.adapter
     if not adapter then
         adapter = source.resolve(ctx)

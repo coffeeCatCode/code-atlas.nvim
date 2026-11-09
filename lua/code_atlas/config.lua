@@ -1,5 +1,5 @@
 -- ============================================================================
--- codegraph.nvim: 默认配置 / 合并逻辑
+-- code-atlas.nvim: 默认配置 / 合并逻辑
 -- 所有可调项集中在这里, 说明见 README.md 与 :h codegraph-config
 -- ============================================================================
 
@@ -182,7 +182,7 @@ M.defaults = {
     --   "daemon"  主动拉起 `codegraph serve --mcp` 后台 (它自带文件监视)
     --   "on_save" 只在保存时 sync
     --   "poll"    定时检查 pendingChanges, 有变更就 sync (能兜住 git checkout 等)
-    --   "off"     完全不管, 只用 :CodeGraph sync 手动同步
+    --   "off"     完全不管, 只用 :CodeAtlas sync 手动同步
     -- ======================================================================
     watcher = {
         mode = "auto",
@@ -249,7 +249,7 @@ M.defaults = {
 
     -- 通知: false = 静默 (错误除外)
     notify = true,
-    -- 状态栏组件: require("codegraph").statusline()
+    -- 状态栏组件: require("code_atlas").statusline()
     statusline = true,
 }
 

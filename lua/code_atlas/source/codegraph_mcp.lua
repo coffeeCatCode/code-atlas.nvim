@@ -1,5 +1,5 @@
 -- ============================================================================
--- codegraph.nvim: 兼容数据源 —— 走 codegraph 自己的 MCP 工具接口
+-- code-atlas.nvim: 兼容数据源 —— 走 codegraph 自己的 MCP 工具接口
 --
 -- 定位: 直读 SQLite (source/codegraph.lua) 是默认快路径, 但它绑定了表结构;
 --       一旦 codegraph 升级改了 nodes/edges 的列, 直读就失效。这时自动退到
@@ -14,9 +14,9 @@
 -- 所以 picker 用异步 finder 调它, 卡住也不冻结 UI。
 -- ============================================================================
 
-local config = require("codegraph.config")
-local mcp = require("codegraph.mcp")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local mcp = require("code_atlas.mcp")
+local util = require("code_atlas.util")
 
 local M = {
     name = "codegraph_mcp",

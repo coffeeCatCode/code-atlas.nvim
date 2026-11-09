@@ -1,13 +1,13 @@
 -- ============================================================================
--- codegraph.nvim: telescope 扩展入口
--- 用法: :Telescope codegraph search / definition / references / callers
+-- code-atlas.nvim: telescope 扩展入口
+-- 用法: :Telescope code_atlas search / definition / references / callers
 --       / callees / files
--- (telescope 的 extension 只负责把命令路由到函数, 真正的 picker 在 codegraph.picker)
+-- (telescope 的 extension 只负责把命令路由到函数, 真正的 picker 在 code_atlas.picker)
 -- ============================================================================
 
 local function export(kind)
     return function(opts)
-        return require("codegraph")[kind](opts or {})
+        return require("code_atlas")[kind](opts or {})
     end
 end
 

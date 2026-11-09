@@ -1,5 +1,5 @@
-local ctx = require("codegraph.project").context()
-local a = require("codegraph.source").resolve(ctx)
+local ctx = require("code_atlas.project").context()
+local a = require("code_atlas.source").resolve(ctx)
 local function bench(label, fn, n)
   local t = vim.uv.hrtime()
   local last
@@ -8,7 +8,7 @@ local function bench(label, fn, n)
 end
 bench("search 带调用点", function() return a.search(ctx, "message", {}) end, 10)
 bench("search 空", function() return a.search(ctx, "", {}) end, 5)
-local cfg = require("codegraph.config").get()
+local cfg = require("code_atlas.config").get()
 cfg.search.include_usages = false
 bench("search 不带调用点", function() return a.search(ctx, "message", {}) end, 10)
 cfg.search.include_usages = true

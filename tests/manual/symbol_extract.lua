@@ -1,4 +1,4 @@
-local cg = require("codegraph")
+local cg = require("code_atlas")
 local cases = {
   { line = "int main() {", at = "main", want = "main" },
   { line = "    Foo::Bar(cb);", at = "Bar", want = "Bar" },

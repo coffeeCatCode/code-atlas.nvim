@@ -1,6 +1,6 @@
 -- 搜索结果里应同时有定义和"调用点"
-local ctx = require("codegraph.project").context()
-local a = require("codegraph.source").resolve(ctx)
+local ctx = require("code_atlas.project").context()
+local a = require("code_atlas.source").resolve(ctx)
 local items = a.search(ctx, "Connect", {})
 local by_kind = {}
 for _, it in ipairs(items) do by_kind[it.kind] = (by_kind[it.kind] or 0) + 1 end

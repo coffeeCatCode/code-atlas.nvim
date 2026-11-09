@@ -3,7 +3,7 @@
 --   cd <项目根>
 --   CG_SRC=src/foo.c CG_SYM=Foo nvim --headless -u tests/minimal_init.lua \
 --       -c "luafile tests/manual/gd_c_proto.lua" -c "qa!"
-local cg = require("codegraph")
+local cg = require("code_atlas")
 
 local src = vim.env.CG_SRC
 local sym = vim.env.CG_SYM

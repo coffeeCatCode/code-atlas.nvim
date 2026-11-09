@@ -1,13 +1,13 @@
 -- ============================================================================
--- codegraph.nvim: 备用数据源 —— 调 `codegraph` 命令行 (JSON 输出)
+-- code-atlas.nvim: 备用数据源 —— 调 `codegraph` 命令行 (JSON 输出)
 --
 -- 什么时候用: 机器上没有 sqlite3, 但有 codegraph; 或者想跟 CLI 的排序/语义
 -- 完全一致。代价是每次查询都要起一个 node 进程 (约 300ms), 所以 picker 里
 -- 查询本身要 300ms 上下, 大库上建议把 search.debounce 调大。
 -- ============================================================================
 
-local config = require("codegraph.config")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local util = require("code_atlas.util")
 
 local M = {
     name = "codegraph_cli",

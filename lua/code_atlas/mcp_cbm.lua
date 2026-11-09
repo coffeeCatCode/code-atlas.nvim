@@ -1,5 +1,5 @@
 -- ============================================================================
--- codegraph.nvim: codebase-memory-mcp 的 MCP 客户端 (stdio, 换行 JSON)
+-- code-atlas.nvim: codebase-memory-mcp 的 MCP 客户端 (stdio, 换行 JSON)
 --
 -- 和 codegraph 的 MCP 客户端分开的原因:
 --   - codegraph 每个项目一个 serve 进程, 有 daemon.sock/pid 要清理;
@@ -9,8 +9,8 @@
 
 local M = {}
 
-local config = require("codegraph.config")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local util = require("code_atlas.util")
 
 local state = {
     proc = nil,
@@ -206,7 +206,7 @@ function M.start(cb)
         params = {
             protocolVersion = "2024-11-05",
             capabilities = {},
-            clientInfo = { name = "codegraph.nvim", version = "0.1.0" },
+            clientInfo = { name = "code-atlas.nvim", version = "0.1.0" },
         },
     }) then
         state.pending[id] = nil
@@ -257,7 +257,7 @@ function M.ensure(timeout)
     local res = request("initialize", {
         protocolVersion = "2024-11-05",
         capabilities = {},
-        clientInfo = { name = "codegraph.nvim", version = "0.1.0" },
+        clientInfo = { name = "code-atlas.nvim", version = "0.1.0" },
     }, timeout or 6000)
     if not res then
         pcall(function()

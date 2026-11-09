@@ -1,12 +1,12 @@
 -- ============================================================================
--- codegraph.nvim: 可选数据源 —— ripgrep 文本搜索
+-- code-atlas.nvim: 可选数据源 —— ripgrep 文本搜索
 --
 -- 默认**不启用** (config.sources 里没有它): 没有 .codegraph 的项目按需求
 -- 就是"不使用"。想在没有索引的项目里也能用 <Leader>gr, 把 "ripgrep" 加进
 -- config.sources 即可 —— 它是纯文本匹配, 没有符号语义, 条目类型是 "match"。
 -- ============================================================================
 
-local util = require("codegraph.util")
+local util = require("code_atlas.util")
 
 local M = {
     name = "ripgrep",

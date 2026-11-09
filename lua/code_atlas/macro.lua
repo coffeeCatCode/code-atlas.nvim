@@ -2,8 +2,8 @@
 -- 对象式宏 (#define F ...) 完全不进索引; gd 用 rg 在项目里补找定义行。
 local M = {}
 
-local config = require("codegraph.config")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local util = require("code_atlas.util")
 
 local GLOBS = {
     "*.h", "*.hpp", "*.hh", "*.hxx", "*.inc",

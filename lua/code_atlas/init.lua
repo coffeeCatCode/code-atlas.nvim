@@ -1,17 +1,17 @@
 -- ============================================================================
--- codegraph.nvim: 入口
+-- code-atlas.nvim: 入口
 --
 -- 把 codegraph(给 AI 用的代码图谱, 项目根下的 .codegraph/codegraph.db)接到
 -- nvim 里:
 --   <Leader>gr  搜索符号, 结果用 telescope 展示
 --   <Leader>gd  跳转定义或声明, 多个时列表选择
--- 其余键位/命令见 README 与 :h codegraph
+-- 其余键位/命令见 README 与 :h code-atlas
 -- ============================================================================
 
-local config = require("codegraph.config")
-local project = require("codegraph.project")
-local util = require("codegraph.util")
-local picker = require("codegraph.picker")
+local config = require("code_atlas.config")
+local project = require("code_atlas.project")
+local util = require("code_atlas.util")
+local picker = require("code_atlas.picker")
 
 local M = {}
 
@@ -51,7 +51,7 @@ local KIND_LINK = {
 
 function M.setup_highlights()
     for kind, link in pairs(KIND_LINK) do
-        vim.api.nvim_set_hl(0, "CodeGraph" .. kind, { link = link, default = true })
+        vim.api.nvim_set_hl(0, "CodeAtlas" .. kind, { link = link, default = true })
     end
 end
 
@@ -302,7 +302,7 @@ end
 ---@return table|nil adapter
 local function resolve_or_warn()
     local ctx = project.context()
-    local adapter = require("codegraph.source").resolve(ctx)
+    local adapter = require("code_atlas.source").resolve(ctx)
     if not adapter then
         if ctx == nil then
             util.notify(
@@ -312,7 +312,20 @@ local function resolve_or_warn()
                 vim.log.levels.WARN
             )
         else
-            util.notify("没有可用数据源 (sqlite3 / codegraph 都不在 PATH 里?)", vim.log.levels.WARN)
+            local cfg = config.get()
+            local loaded = {}
+            for name in pairs(require("code_atlas.source").registry) do
+                loaded[#loaded + 1] = name
+            end
+            table.sort(loaded)
+            util.notify(
+                ("没有可用数据源: sqlite3=%s, codegraph=%s, 已加载=%s"):format(
+                    util.executable(cfg.sqlite.bin) and "有" or "无",
+                    util.executable(cfg.cli.bin) and "有" or "无",
+                    #loaded > 0 and table.concat(loaded, ",") or "(空)"
+                ),
+                vim.log.levels.WARN
+            )
         end
         return nil, nil
     end
@@ -361,7 +374,7 @@ local function merge_parent_definitions(ctx, items, sym, opts)
         return items
     end
 
-    local source = require("codegraph.source")
+    local source = require("code_atlas.source")
     local function key_of(it)
         return (it.file or "") .. ":" .. tostring(it.line or 0) .. ":" .. tostring(it.name or "")
     end
@@ -437,7 +450,7 @@ local function cbm_adapter(ctx)
     if not cfg.codebase_memory or cfg.codebase_memory.enabled == false then
         return nil
     end
-    local ok, source = pcall(require, "codegraph.source")
+    local ok, source = pcall(require, "code_atlas.source")
     if not ok then
         return nil
     end
@@ -702,7 +715,7 @@ function M.definition(opts)
 
         -- 对象式宏 (#define NAME ...) 不进图谱: 用 rg 补找定义行
         if not sym.member and cfg.definition.macro_fallback ~= false then
-            local ok, macro = pcall(require, "codegraph.macro")
+            local ok, macro = pcall(require, "code_atlas.macro")
             if ok then
                 local defs = macro.find(ctx, sym.name) or {}
                 if #defs > 0 then
@@ -726,7 +739,7 @@ function M.definition(opts)
             return
         end
         util.notify(
-            ("没有找到定义: %s (索引可能过期, 试 :CodeGraph sync)"):format(sym.name),
+            ("没有找到定义: %s (索引可能过期, 试 :CodeAtlas sync)"):format(sym.name),
             vim.log.levels.WARN
         )
         return
@@ -759,7 +772,7 @@ function M.definition(opts)
         -- codegraph 不给 C/C++ 头文件里的函数原型建节点, 索引里"没有声明"时
         -- 在头文件里用 rg 捞一下原型, 否则从 .c 按 gd 永远只能停在 .c
         if #wanted == 0 and not cur_is_header then
-            local ok, proto = pcall(require, "codegraph.proto")
+            local ok, proto = pcall(require, "code_atlas.proto")
             if ok then
                 local decls = proto.find(ctx, sym.name, { limit = 20 }) or {}
                 if #decls > 0 then
@@ -884,10 +897,10 @@ function M.status_info(ctx)
     ctx = ctx or project.context()
     local out = {
         ctx = ctx,
-        watcher = require("codegraph.watcher").status(ctx),
+        watcher = require("code_atlas.watcher").status(ctx),
     }
     if ctx then
-        local adapter = require("codegraph.source").resolve(ctx)
+        local adapter = require("code_atlas.source").resolve(ctx)
         out.adapter = adapter and (adapter.label or adapter.name) or nil
         if adapter then
             local ok, st = pcall(adapter.status, ctx)
@@ -897,7 +910,7 @@ function M.status_info(ctx)
     return out
 end
 
---- :CodeGraph status / <Leader>gs
+--- :CodeAtlas status / <Leader>gs
 function M.status()
     local ctx = ctx_or_warn()
     if not ctx then
@@ -928,7 +941,7 @@ function M.status()
     if st.pending then
         local pending = (st.pending.added or 0) + (st.pending.modified or 0) + (st.pending.removed or 0)
         lines[#lines + 1] = {
-            ("  待同步    %d 个文件%s"):format(pending, pending > 0 and " (:CodeGraph sync)" or ""),
+            ("  待同步    %d 个文件%s"):format(pending, pending > 0 and " (:CodeAtlas sync)" or ""),
             pending > 0 and "DiagnosticWarn" or "DiagnosticOk",
         }
     end
@@ -947,7 +960,7 @@ function M.sync(opts)
     if not ctx then
         return
     end
-    require("codegraph.watcher").sync_now(ctx, { quiet = false })
+    require("code_atlas.watcher").sync_now(ctx, { quiet = false })
 end
 
 --- 全量重建索引 (codegraph index)
@@ -987,7 +1000,7 @@ function M.daemon(action)
     if not ctx then
         return
     end
-    local watcher = require("codegraph.watcher")
+    local watcher = require("code_atlas.watcher")
     if action == "start" then
         local ok = watcher.start_daemon(ctx)
         util.notify(ok and "已请求拉起 codegraph 后台" or "拉起失败 (检查 codegraph 命令)", ok and vim.log.levels.INFO or vim.log.levels.WARN)
@@ -1043,11 +1056,11 @@ function M.statusline()
         return ""
     end
     local text = "cg"
-    local adapter = require("codegraph.source").resolve(ctx)
+    local adapter = require("code_atlas.source").resolve(ctx)
     if adapter and adapter.status then
         local ok, st = pcall(adapter.status, ctx)
         if ok and type(st) == "table" and st.nodes then
-            text = "cg:" .. util.fmt_count(st.nodes)
+            text = "atlas:" .. util.fmt_count(st.nodes)
         end
     end
     st_cache.text = text
@@ -1059,8 +1072,8 @@ end
 -- ---------------------------------------------------------------------------
 
 local KEY_DESC = {
-    search = "codegraph 搜索符号",
-    definition = "codegraph 跳转定义/声明",
+    search = "code-atlas 搜索符号",
+    definition = "code-atlas 跳转定义/声明",
     references = "codegraph 引用",
     callers = "codegraph 调用者",
     callees = "codegraph 被调用",
@@ -1073,7 +1086,7 @@ local KEY_DESC = {
 local function setup_keymaps(cfg)
     for name, lhs in pairs(cfg.keymaps or {}) do
         if lhs and lhs ~= false and type(lhs) == "string" and KEY_DESC[name] and M[name] then
-            -- 顶掉同名的旧映射 (coc 的 <Leader>gr 引用列表就让位给 codegraph 搜索)
+            -- 顶掉同名的旧映射 (coc 的 <Leader>gr 引用列表就让位给 code-atlas 搜索)
             pcall(vim.keymap.del, "n", lhs)
             vim.keymap.set("n", lhs, function()
                 M[name]()
@@ -1127,19 +1140,19 @@ local function run_command(args)
     elseif sub == "root" then
         M.root(rest ~= "" and rest or nil)
     elseif sub == "doctor" or sub == "health" then
-        pcall(vim.cmd, "checkhealth codegraph")
+        pcall(vim.cmd, "checkhealth code_atlas")
     else
         util.notify("未知子命令: " .. sub .. " (可用: " .. table.concat(SUBCOMMANDS, ", ") .. ")", vim.log.levels.WARN)
     end
 end
 
 local function setup_commands()
-    pcall(vim.api.nvim_del_user_command, "CodeGraph")
-    vim.api.nvim_create_user_command("CodeGraph", function(info)
+    pcall(vim.api.nvim_del_user_command, "CodeAtlas")
+    vim.api.nvim_create_user_command("CodeAtlas", function(info)
         run_command(info.args)
     end, {
         nargs = "*",
-        desc = "codegraph: search/definition/references/callers/callees/files/status/sync/index/daemon/root/doctor",
+        desc = "code-atlas: search/definition/references/callers/callees/files/status/sync/index/daemon/root/doctor",
         complete = function(arglead, cmdline, _)
             local parts = vim.split(cmdline, "%s+", { trimempty = true })
             if #parts <= 2 then
@@ -1165,8 +1178,8 @@ function M.setup(opts)
     M.setup_highlights()
     setup_keymaps(cfg)
     setup_commands()
-    require("codegraph.watcher").setup()
-    require("codegraph.source").load()
+    require("code_atlas.watcher").setup()
+    require("code_atlas.source").load()
 
     -- 如果这个项目最终落到 MCP 数据源 (直读失效/用户指定), 进 buffer 时在后台
     -- 先把 `codegraph serve --mcp` 暖起来, 这样第一次 gd/gr 不用等 4~6s
@@ -1177,9 +1190,9 @@ function M.setup(opts)
             if not ctx then
                 return
             end
-            local adapter = require("codegraph.source").resolve(ctx)
+            local adapter = require("code_atlas.source").resolve(ctx)
             if adapter and adapter.name == "codegraph_mcp" then
-                require("codegraph.mcp").client(ctx.root):ensure(function() end)
+                require("code_atlas.mcp").client(ctx.root):ensure(function() end)
             end
         end,
     })
@@ -1199,7 +1212,7 @@ function M.setup(opts)
                     return
                 end
                 cbm_warmed[ctx.root] = true
-                local ok, cbm = pcall(require, "codegraph.source.codebase_memory")
+                local ok, cbm = pcall(require, "code_atlas.source.codebase_memory")
                 if ok and cbm and cbm.warmup then
                     cbm.warmup(ctx)
                 end
@@ -1211,8 +1224,8 @@ function M.setup(opts)
     vim.api.nvim_create_autocmd("VimLeavePre", {
         once = true,
         callback = function()
-            require("codegraph.mcp").stop_all()
-            require("codegraph.mcp_cbm").stop()
+            require("code_atlas.mcp").stop_all()
+            require("code_atlas.mcp_cbm").stop()
         end,
     })
 

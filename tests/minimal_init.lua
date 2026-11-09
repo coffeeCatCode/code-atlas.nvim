@@ -17,6 +17,6 @@ for _, name in ipairs({ "plenary.nvim", "telescope.nvim" }) do
     end
 end
 
-require("codegraph").setup({
+require("code_atlas").setup({
     notify = true,
 })

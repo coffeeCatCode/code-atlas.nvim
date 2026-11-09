@@ -1,10 +1,10 @@
 -- ============================================================================
--- codegraph.nvim: :checkhealth codegraph
+-- code-atlas.nvim: :checkhealth code_atlas
 -- ============================================================================
 
-local config = require("codegraph.config")
-local project = require("codegraph.project")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local project = require("code_atlas.project")
+local util = require("code_atlas.util")
 
 local M = {}
 
@@ -15,7 +15,7 @@ end
 
 function M.check()
     local h = health()
-    h.start("codegraph.nvim")
+    h.start("code-atlas.nvim")
 
     -- ------------------------------------------------------------------
     h.start("环境")
@@ -62,7 +62,7 @@ function M.check()
         h.info("索引目录: " .. ctx.index_dir)
         h.info(("db: %s (%s)"):format(ctx.db, util.fmt_size(ctx.db_size)))
 
-        local source = require("codegraph.source")
+        local source = require("code_atlas.source")
         local adapter = source.resolve(ctx)
         if not adapter then
             h.error("没有可用的数据源 (检查 sqlite3 / codegraph 可执行文件)")
@@ -79,7 +79,7 @@ function M.check()
                 if st.pending then
                     local pending = (st.pending.added or 0) + (st.pending.modified or 0) + (st.pending.removed or 0)
                     if pending > 0 then
-                        h.warn(("有 %d 个文件还没同步 (:CodeGraph sync)"):format(pending))
+                        h.warn(("有 %d 个文件还没同步 (:CodeAtlas sync)"):format(pending))
                     else
                         h.ok("索引与工作区一致")
                     end
@@ -102,7 +102,7 @@ function M.check()
     -- ------------------------------------------------------------------
     h.start("数据源")
     -- ------------------------------------------------------------------
-    local source = require("codegraph.source")
+    local source = require("code_atlas.source")
     for _, item in ipairs(source.list(ctx)) do
         if item.available then
             h.ok(("%s: 可用"):format(item.label))
@@ -118,7 +118,7 @@ function M.check()
     -- ------------------------------------------------------------------
     do
         local cfg_cb = cfg.codebase_memory or {}
-        local source_mod = require("codegraph.source")
+        local source_mod = require("code_atlas.source")
         source_mod.load()
         local cb = source_mod.get("codebase_memory")
         local exe = cfg_cb.cmd and cfg_cb.cmd[1] or "codebase-memory-mcp"
@@ -163,7 +163,7 @@ function M.check()
         h.info("已关闭 (mcp.enabled = false)")
     else
         h.info("工具白名单: " .. tostring(cfg.mcp.tools))
-        local mcp = require("codegraph.mcp")
+        local mcp = require("code_atlas.mcp")
         local server = ctx and mcp.server_info(ctx.root) or nil
         if server then
             h.ok(("已连接: %s %s"):format(tostring(server.name), tostring(server.version)))
@@ -175,7 +175,7 @@ function M.check()
     -- ------------------------------------------------------------------
     h.start("索引新鲜度")
     -- ------------------------------------------------------------------
-    local watcher = require("codegraph.watcher")
+    local watcher = require("code_atlas.watcher")
     local ws = watcher.status(ctx)
     h.info(("watcher.mode = %s, 实际生效 = %s"):format(tostring(ws.mode), tostring(ws.effective)))
     h.info("后台守护: " .. ws.daemon)

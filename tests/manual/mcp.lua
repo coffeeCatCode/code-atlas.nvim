@@ -3,11 +3,11 @@
 --   cd <项目根>
 --   CG_SYMBOL=<符号> nvim --headless -u tests/minimal_init.lua \
 --       -c "luafile tests/manual/mcp.lua" -c "qa!"
-local cg = require("codegraph")
+local cg = require("code_atlas")
 cg.config.setup({ source = "codegraph_mcp" })
 
-local project = require("codegraph.project")
-local source = require("codegraph.source")
+local project = require("code_atlas.project")
+local source = require("code_atlas.source")
 local ctx = project.context()
 local a = source.resolve(ctx)
 print("adapter:", a and a.name)

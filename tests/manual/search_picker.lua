@@ -1,5 +1,5 @@
 -- 搜索 picker 实测: 打开 -> 等待 -> 模拟输入 -> 看结果数变化
-local cg = require("codegraph")
+local cg = require("code_atlas")
 local telescope_state = require("telescope.state")
 
 local function status()

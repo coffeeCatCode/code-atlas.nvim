@@ -1,5 +1,5 @@
 -- 搜索首屏耗时 (含父索引合并)
-local cg = require("codegraph")
+local cg = require("code_atlas")
 local telescope_state = require("telescope.state")
 
 local function st_of()

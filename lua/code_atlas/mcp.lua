@@ -1,5 +1,5 @@
 -- ============================================================================
--- codegraph.nvim: MCP 客户端 (stdio, 换行分隔的 JSON-RPC)
+-- code-atlas.nvim: MCP 客户端 (stdio, 换行分隔的 JSON-RPC)
 --
 -- 为什么要有这个:
 --   1) 直读 SQLite 最快 (20~40ms), 但绑定表结构 —— codegraph 升级改了列就失效;
@@ -17,8 +17,8 @@
 
 local M = {}
 
-local config = require("codegraph.config")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local util = require("code_atlas.util")
 
 ---@type table<string, table> root -> Client
 local clients = {}
@@ -179,7 +179,7 @@ function Client:ensure(cb)
     self:request("initialize", {
         protocolVersion = "2024-11-05",
         capabilities = {},
-        clientInfo = { name = "codegraph.nvim", version = "0.1.0" },
+        clientInfo = { name = "code-atlas.nvim", version = "0.1.0" },
     }, function(result, err)
         if not result then
             flush(false, err)
@@ -195,7 +195,7 @@ end
 --- 读出 .codegraph/daemon.pid 里的 pid (没有/坏了返回 nil)
 ---@return number|nil
 function Client:_daemon_pid()
-    local project = require("codegraph.project")
+    local project = require("code_atlas.project")
     local ctx = project.check_dir(self.root, config.get())
     if not ctx then
         return nil
@@ -389,9 +389,9 @@ function M.stop_all()
     -- `codegraph serve --mcp` 会自己 daemonize: 我们 kill 掉的只是那个马上退出的
     -- 父进程, 真正干活的是 daemon.pid 里的进程。自己拉起来的要负责收掉,
     -- 但启动前就已经存在的后台 (比如 AI 客户端那只) 不能动。
-    local project = require("codegraph.project")
-    local cfg = require("codegraph.config").get()
-    local watcher = require("codegraph.watcher")
+    local project = require("code_atlas.project")
+    local cfg = require("code_atlas.config").get()
+    local watcher = require("code_atlas.watcher")
     local uv = vim.uv or vim.loop
 
     for _, item in ipairs(pending) do

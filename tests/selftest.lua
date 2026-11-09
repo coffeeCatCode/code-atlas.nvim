@@ -24,9 +24,9 @@ local function section(name)
     print("\n== " .. name .. " ==")
 end
 
-local config = require("codegraph.config")
-local project = require("codegraph.project")
-local source = require("codegraph.source")
+local config = require("code_atlas.config")
+local project = require("code_atlas.project")
+local source = require("code_atlas.source")
 
 local cfg = config.get()
 local root = vim.env.CG_ROOT or vim.fn.getcwd()
@@ -168,7 +168,7 @@ do
     end
 end
 if jump_item then
-    local picker_mod = require("codegraph.picker")
+    local picker_mod = require("code_atlas.picker")
     check(picker_mod.jump(jump_item), "jump() 成功")
     local cword = vim.fn.expand("<cword>")
     local short = (jump_item.name or ""):match("([%w_]+)$") or ""
@@ -198,7 +198,7 @@ local symbol_cases = {
       at = "heap->heap", want = "heap", base = "heap", member = "heap", offset = 7 },
     { line = "    int n = sizeof(struct Foo);", at = "Foo", want = "Foo" },
 }
-local cg_mod = require("codegraph")
+local cg_mod = require("code_atlas")
 local scratch = vim.api.nvim_create_buf(false, true)
 vim.api.nvim_set_current_buf(scratch)
 for _, case in ipairs(symbol_cases) do
@@ -274,7 +274,7 @@ if mcp_src then
     check(files[1] and files[1].node_count == 7, "parse_files 符号数")
 
     local status_text = table.concat({
-        "**CodeGraph Status**",
+        "**CodeAtlas Status**",
         "",
         "**Files indexed:** 54",
         "**Total nodes:** 595",
@@ -294,23 +294,23 @@ section("UI 注册")
 check(vim.fn.maparg("<Leader>gr", "n") ~= "", "<Leader>gr 已映射")
 check(vim.fn.maparg("<Leader>gd", "n") ~= "", "<Leader>gd 已映射")
 check(vim.fn.maparg("<Leader>gR", "n") ~= "", "<Leader>gR 已映射")
-check(vim.fn.exists(":CodeGraph") == 2, ":CodeGraph 命令存在")
+check(vim.fn.exists(":CodeAtlas") == 2, ":CodeAtlas 命令存在")
 
-local hl = vim.api.nvim_get_hl(0, { name = "CodeGraphfunction", link = false })
+local hl = vim.api.nvim_get_hl(0, { name = "CodeAtlasfunction", link = false })
 check(hl ~= nil, "高亮组已注册")
 
 -- telescope 能懒加载
 local ok_t, telescope = pcall(require, "telescope")
 check(ok_t and telescope ~= nil, "telescope 可以 require")
 if ok_t then
-    local ok_ext, err = pcall(require, "telescope._extensions.codegraph")
+    local ok_ext, err = pcall(require, "telescope._extensions.code_atlas")
     check(ok_ext, "telescope 扩展可以加载: " .. tostring(err))
 end
 
 -- ---------------------------------------------------------------------------
 section("状态栏 / 状态")
 -- ---------------------------------------------------------------------------
-local cg = require("codegraph")
+local cg = require("code_atlas")
 local sl = cg.statusline()
 info("statusline = '" .. sl .. "'")
 check(sl ~= "", "statusline 有内容")

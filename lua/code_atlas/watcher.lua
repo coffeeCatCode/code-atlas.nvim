@@ -1,5 +1,5 @@
 -- ============================================================================
--- codegraph.nvim: 索引新鲜度 (后台守护 / 保存后同步 / 轮询)
+-- code-atlas.nvim: 索引新鲜度 (后台守护 / 保存后同步 / 轮询)
 --
 -- codegraph 自己的后台是 `codegraph serve --mcp -p <root>`: 它会监听
 -- .codegraph/daemon.sock、监视工程文件、有变化就自动 sync, 空闲 300s 后退出。
@@ -12,9 +12,9 @@
 --   auto = 别人(比如 AI 客户端)已经起了后台就白嫖它, 没有就保存时自己同步
 -- ============================================================================
 
-local config = require("codegraph.config")
-local project = require("codegraph.project")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local project = require("code_atlas.project")
+local util = require("code_atlas.util")
 
 local M = {}
 
@@ -65,7 +65,7 @@ function M.sync_now(ctx, opts)
         return
     end
 
-    local src = require("codegraph.source")
+    local src = require("code_atlas.source")
     local a = src.resolve(ctx)
     if not a or not a.sync then
         if not opts.quiet then
@@ -322,7 +322,7 @@ local function poll_once()
         return -- 后台自己会 sync
     end
 
-    local a = require("codegraph.source").resolve(ctx)
+    local a = require("code_atlas.source").resolve(ctx)
     local ok, st = pcall(function()
         return a and a.status and a.status(ctx)
     end)
@@ -393,7 +393,7 @@ function M.attach(ctx)
     if mode == "auto" and cfg().daemon.autostart and not M.daemon_state(ctx) then
         -- 文件数太多就不拉后台 (node 进程常驻约 150MB)
         local d = cfg().daemon
-        local a = require("codegraph.source").resolve(ctx)
+        local a = require("code_atlas.source").resolve(ctx)
         local count
         if a and a.status then
             local ok, st = pcall(a.status, ctx)
@@ -499,7 +499,7 @@ function M.shutdown()
     end
 end
 
---- 状态 (给 :CodeGraph status / health 用)
+--- 状态 (给 :CodeAtlas status / health 用)
 ---@param ctx table|nil
 ---@return table
 function M.status(ctx)

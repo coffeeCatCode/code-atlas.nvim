@@ -1,5 +1,5 @@
 -- ============================================================================
--- codegraph.nvim: 默认数据源 —— 直读 .codegraph/codegraph.db (SQLite)
+-- code-atlas.nvim: 默认数据源 —— 直读 .codegraph/codegraph.db (SQLite)
 --
 -- 为什么直读而不是每次跑 `codegraph query`:
 --   sqlite3 一条 LIKE 查询在 2 万节点的库上约 10~20ms (含进程启动),
@@ -16,8 +16,8 @@
 --   file_path 是相对项目根的路径
 -- ============================================================================
 
-local config = require("codegraph.config")
-local util = require("codegraph.util")
+local config = require("code_atlas.config")
+local util = require("code_atlas.util")
 
 local M = {
     name = "codegraph",
@@ -46,6 +46,7 @@ local COLS = table.concat({
 ---@return string|nil err
 -- 运行期发现 SQL 已经不兼容 (例如后台重建索引换了 schema): 置位后 available() 立刻变 false
 M.broken = nil
+M.broken_mtime = nil
 
 ---@param msg string
 ---@return boolean
@@ -85,6 +86,8 @@ local function query(ctx, sql, timeout)
         if is_schema_error(last_err) then
             -- 库结构变了: 这一轮之后让 auto 模式换数据源
             M.broken = last_err
+            local st = vim.uv.fs_stat(ctx.db)
+            M.broken_mtime = st and st.mtime.sec or nil
             util.notify(
                 "codegraph 库结构变了, 直读失效 (" .. util.oneline(last_err) .. "), 改用 MCP/CLI",
                 vim.log.levels.WARN
@@ -159,7 +162,15 @@ function M.available(ctx)
         return false
     end
     if M.broken then
-        return false
+        -- 库被重建过 (mtime 变了) 就重新给直读一次机会
+        local st = vim.uv.fs_stat(ctx.db)
+        local mtime = st and st.mtime.sec or nil
+        -- broken_mtime 为 nil 表示是测试/手动置位, 不去猜
+        if M.broken_mtime == nil or M.broken_mtime == mtime then
+            return false
+        end
+        M.broken = nil
+        M.broken_mtime = nil
     end
     if not util.executable(config.get().sqlite.bin) then
         return false
