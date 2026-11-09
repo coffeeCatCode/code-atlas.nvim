@@ -192,6 +192,11 @@ local symbol_cases = {
     { line = "    p->len = 0;", at = "len", want = "len", base = "p", member = "len", call = false },
     { line = "    cfg.count = 0;", at = "count", want = "count", base = "cfg", member = "count", call = false },
     { line = "    pFoo->Init();", at = "Init", want = "Init", base = "pFoo", member = "Init", call = true },
+    { line = "    ret += multi_heap_free_size(heap->heap);",
+      at = "multi_heap_free_size", want = "multi_heap_free_size", call = true, no_member = true },
+    { line = "    ret += multi_heap_free_size(heap->heap);",
+      at = "heap->heap", want = "heap", base = "heap", member = "heap", offset = 7 },
+    { line = "    int n = sizeof(struct Foo);", at = "Foo", want = "Foo" },
 }
 local cg_mod = require("codegraph")
 local scratch = vim.api.nvim_create_buf(false, true)
@@ -199,7 +204,7 @@ vim.api.nvim_set_current_buf(scratch)
 for _, case in ipairs(symbol_cases) do
     vim.api.nvim_buf_set_lines(scratch, 0, -1, false, { case.line })
     local col = case.line:find(case.at, 1, true)
-    vim.api.nvim_win_set_cursor(0, { 1, col - 1 })
+    vim.api.nvim_win_set_cursor(0, { 1, col - 1 + (case.offset or 0) })
     local sym = cg_mod.symbol()
     check(sym.name == case.want, ("%s -> name=%s (want %s)"):format(case.line, sym.name, case.want))
     if case.base then
@@ -212,6 +217,10 @@ for _, case in ipairs(symbol_cases) do
     if case.call ~= nil then
         check(sym.is_call == case.call,
             ("%s -> is_call=%s (want %s)"):format(case.line, tostring(sym.is_call), tostring(case.call)))
+    end
+    if case.no_member then
+        check(sym.member == nil,
+            ("%s -> member=%s (want nil)"):format(case.line, tostring(sym.member)))
     end
 end
 

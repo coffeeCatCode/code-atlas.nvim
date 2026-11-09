@@ -62,6 +62,9 @@ C++ 的 p->Method() 只认 Type::Method, 方法没进图谱时交给 coc。
 唯一候选直接跳, 多个才弹 telescope 列表。跳转后光标会落在符号名上
 (codegraph 的 start_column 对 C/C++ 不可靠), 所以连按两次就在声明和实现之间来回跳。
 
+对象式宏 (#define NAME ...) 不建节点: gd 找不到时用 rg 在项目里搜 ^#define NAME 并跳过去
+(definition.macro_fallback); 函数式宏 (#define NAME(x)) 是 constant 节点, 正常跳。
+
 codegraph 不给 C/C++ 头文件里的函数原型建节点, 索引里找不到声明时, 插件会用
 rg 在 *.h/*.hpp 里补找原型 (以 ; 结尾、无 {、非 typedef/#define), 同名头文件优先。
 
@@ -113,6 +116,7 @@ telescope 扩展:                                     *:Telescope codegraph*
                    search_parents = true, max_parents = 2 },
         definition = { jump_single = true, fallback = "coc", toggle = true,
                        type_kinds = { "struct", "class", "union", "enum", "type_alias" },
+                       macro_fallback = true,
                        search_parents = true, max_parents = 3 },
         keymaps = { search = "<Leader>gr", definition = "<Leader>gd" },
         watcher = { mode = "auto" },                 -- |codegraph-watcher|

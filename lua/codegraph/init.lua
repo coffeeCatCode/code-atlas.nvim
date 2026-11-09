@@ -168,56 +168,116 @@ end
 --- 例: "ns::Foo(" -> { qualified = "ns::Foo", name = "Foo" }
 ---     "main()" / "(bar)" / "baz);" / "std::vector<int>" 也都要能收拾干净
 ---@return table { name, qualified }
+--- 光标所在/紧挨着的标识符 (不把整行非空白串当成一个词)
+---@return table|nil
+local function symbol_at_cursor()
+    local line = vim.api.nvim_get_current_line()
+    local len = #line
+    local col = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1-based byte
+
+    local function is_word(i)
+        return line:sub(i, i):match("[%w_]") ~= nil
+    end
+
+    local s, e
+    if col <= len and is_word(col) then
+        s, e = col, col
+    elseif col > 1 and is_word(col - 1) then
+        s, e = col - 1, col - 1
+    else
+        return nil
+    end
+    while s > 1 and is_word(s - 1) do
+        s = s - 1
+    end
+    while e < len and is_word(e + 1) do
+        e = e + 1
+    end
+
+    local name = line:sub(s, e)
+
+    -- 向左收 :: 限定名 (Foo::Bar)
+    local qualified = name
+    local qs = s
+    while qs > 1 do
+        local left = line:sub(1, qs - 1):gsub("%s+$", "")
+        local sep = left:match("::%s*$")
+        if not sep then
+            break
+        end
+        local head = left:sub(1, #left - #sep)
+        local ps, pe = head:find("([%w_]+)$")
+        if not ps then
+            break
+        end
+        qualified = head:sub(ps, pe) .. "::" .. qualified
+        qs = ps
+    end
+    qualified = qualified:gsub("^::", "")
+
+    -- 成员访问: 前面紧挨着 -> 或 . (只认光标这个标识符)
+    local before = line:sub(1, qs - 1):gsub("%s+$", "")
+    local base, member
+    local prefix
+    if before:sub(-2) == "->" then
+        prefix = before:sub(1, -3)
+    elseif before:sub(-1) == "." then
+        prefix = before:sub(1, -2)
+    end
+    if prefix then
+        prefix = prefix:gsub("%s+$", "")
+        local ps, pe = prefix:find("([%w_]+)$")
+        if ps then
+            base = prefix:sub(ps, pe)
+            member = name
+        end
+    end
+
+    local tail = line:sub(e + 1):gsub("^%s+", "")
+    local is_call = tail:sub(1, 1) == "("
+
+    return {
+        name = name,
+        qualified = qualified,
+        base = base,
+        member = member,
+        is_call = is_call,
+    }
+end
+
 function M.symbol()
-    local word = vim.fn.expand("<cWORD>")
-    if not word or word == "" then
-        word = vim.fn.expand("<cword>")
-    end
+    local sym = symbol_at_cursor()
 
-    -- 成员访问: p->field / obj.field (C/C++ 里 codegraph 不索引结构体成员)
-    -- <cWORD> 会把前后的 & ( , 之类一起带进来, 所以不锚定开头
-    local raw_word = word or ""
-    local base, member, member_end = raw_word:match("([%w_]+)%s*%-%>%s*([%w_]+)()")
-    if not base then
-        base, member, member_end = raw_word:match("([%w_]+)%.([%w_]+)()")
+    if not sym then
+        -- 光标停在标点上: 退回 <cWORD>, 只取末段标识符
+        local word = vim.fn.expand("<cWORD>") or ""
+        local w = word:gsub("%s+", ""):gsub("^[%(%[%{<\"'&%*]+", "")
+        w = w:match("^([^(<]*)") or w
+        w = w:gsub("[%)%]%}%(%[%{%)%]\"',;:%.]+$", "")
+        local short = w:match("([%w_]+)$") or ""
+        if short == "" then
+            return { name = "", qualified = "" }
+        end
+        sym = { name = short, qualified = w, is_call = false }
     end
-    local is_call = false
-    if member and member_end then
-        local tail = raw_word:sub(member_end):gsub("^%s+", "")
-        is_call = tail:sub(1, 1) == "("
-    end
-
-    local w = (word or ""):gsub("%s+", "")
-    w = w:gsub("^[%(%[%{<\"']+", "") -- 开头的括号/引号
-    w = w:gsub("^::", "") -- 全局作用域前缀
-    w = w:match("^([^(<]*)") or w -- 调用/模板写法只取前面: foo(a,b) -> foo
-    w = w:gsub("[%)%]%}%(%[%{%)%]\"']+$", "") -- 尾部括号/引号
-    w = w:gsub("[,;:%.]+$", "")
-
-    local short = w:match("([%w_]+)$") or ""
 
     -- 光标在 void/int/static 这类词上: 换成本行的函数名再试
-    if short == "" or TYPE_WORDS[short] then
+    if sym.name == "" or TYPE_WORDS[sym.name] then
         local row = vim.api.nvim_win_get_cursor(0)[1]
         local last = vim.api.nvim_buf_line_count(0)
         for i = row, math.min(row + 2, last) do
             local line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1] or ""
             local seg = name_before_paren(line)
             if seg then
-                w = seg
-                short = seg:match("([%w_]+)$") or short
+                sym.name = seg:match("([%w_]+)$") or sym.name
+                sym.qualified = seg
+                sym.base, sym.member, sym.is_call = nil, nil, false
                 break
             end
         end
     end
 
-    return {
-        name = short,
-        qualified = w,
-        base = base,
-        member = member,
-        is_call = is_call,
-    }
+    return sym
 end
 
 -- ---------------------------------------------------------------------------
@@ -546,6 +606,27 @@ function M.definition(opts)
                     })
                 end
                 return
+            end
+        end
+
+        -- 对象式宏 (#define NAME ...) 不进图谱: 用 rg 补找定义行
+        if not sym.member and cfg.definition.macro_fallback ~= false then
+            local ok, macro = pcall(require, "codegraph.macro")
+            if ok then
+                local defs = macro.find(ctx, sym.name) or {}
+                if #defs > 0 then
+                    if #defs == 1 then
+                        picker.jump(defs[1])
+                    else
+                        picker.open("definition", {
+                            ctx = ctx,
+                            adapter = adapter,
+                            name = sym.name,
+                            items = defs,
+                        })
+                    end
+                    return
+                end
             end
         end
 

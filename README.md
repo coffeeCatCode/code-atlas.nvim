@@ -265,8 +265,10 @@ watcher = {
 
 **`<Leader>gd`** 的流程：
 
-1. 取光标下的 `<cWORD>`，去掉首尾括号标点，拆成
-   `qualified`（如 `ns::Foo`）和 `name`（`Foo`）；
+1. 取**光标所在**的那个标识符（按行列扫描，不是整段 `<cWORD>`）：所以
+   `ret += multi_heap_free_size(heap->heap);` 里光标在函数名上就是 `multi_heap_free_size`，
+   不会因为同一行有 `->` 被误判成成员访问 —— 两个名字紧挨着也能各认各的；
+   再向左收 `::` 限定名，拆成 `qualified`（`ns::Foo`）和 `name`（`Foo`）；
 2. **成员访问 / 结构体变量**（`p->field`、`obj.field`，或光标就在 `p` 上）：
    codegraph 只给 `struct/class` 类型建节点、**不索引成员**，所以 `gd` 先在当前 buffer 里
    找 base 的声明（`Foo *p = ...`、`Foo f;`、`void f(Foo *p)`），推出类型后
@@ -286,7 +288,10 @@ watcher = {
    `uint8_t Foo(int);` 不进 `nodes` 表 —— 所以从 `.c` 按 `gd` 在索引里找不到声明。
    这时会在头文件里用 `rg` 捞原型（`-g *.h/*.hpp/...`，要求 `;` 结尾、无 `{`、
    非 typedef/#define、`=` 不在 `(` 之前），同名的头文件优先。
-9. 一个都没有 → 按 `definition.fallback` 交给 coc（喂 `<Plug>(coc-definition)`），
+9. **对象式宏兜底**：codegraph 只给函数式宏（`#define F(x)`）建 `constant` 节点，
+   `#define F 1` 这种对象式宏完全不在索引里。`gd` 找不到时会用 `rg` 在项目里搜
+   `^#define <name>`，命中就跳过去（`definition.macro_fallback = false` 可关）。
+10. 一个都没有 → 按 `definition.fallback` 交给 coc（喂 `<Plug>(coc-definition)`），
    没有 coc 就提示"索引可能过期，试 `:CodeGraph sync`"。
 
 ---
@@ -329,6 +334,7 @@ require("codegraph").setup({
         header_exts = { "h", "hpp", "hh", "hxx", "inl", "ipp", "tpp", "inc", "def" },
         toggle = true,                            -- .h 里按 gd 找实现, .c/.cpp 里找声明
         type_kinds = { "struct", "class", "union", "enum", "type_alias", "typedef" },
+        macro_fallback = true,                    -- 对象式宏用 rg 补找 #define
         search_parents = true,                    -- 本层没有时查上级 .codegraph
         max_parents = 3,
         prefer_impl = true,                       -- toggle 判断不出来时的默认倾向
@@ -562,6 +568,8 @@ nvim --headless -u ~/.config/nvim/local/codegraph.nvim/tests/minimal_init.lua \
 
 - **codegraph 的 `start_column` 不可靠**（C/C++ 常年是 0）：跳转定位靠"在目标行里找符号名"，
   名字在目标行出现多次时取第一个；找不到才退回行首。
+- **对象式宏不在图谱里**：`#define NAME ...` 不建节点，`gd` 靠 `rg` 补找（第 7 节第 9 条），
+  能跳但 `<Leader>gr` 搜不到；`#define NAME(x)` 这类函数式宏是 `constant` 节点，两者都正常。
 - **结构体成员不在图谱里**：codegraph 只索引 `struct/class` 类型，没有字段节点。`gd` 靠
   当前 buffer 里的声明推断 base 的类型再跳到类型定义；声明不在当前文件（全局变量、`auto`）
   时只能交给 coc。多个同名结构体（比如仓库里有份 `audit/` 拷贝）会弹列表。

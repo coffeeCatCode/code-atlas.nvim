@@ -122,6 +122,8 @@ M.defaults = {
         same_file_first = true,
         -- 只有一个结果时直接跳; false = 也开 picker
         jump_single = true,
+        -- codegraph 不索引对象式宏 (#define F ...): 找不到时用 rg 补找定义行
+        macro_fallback = true,
         -- 光标在结构体变量 / 成员访问上时, 按声明推断类型, 跳到这些 kind 的定义
         type_kinds = {
             "struct",
